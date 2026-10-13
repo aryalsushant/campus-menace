@@ -20,7 +20,7 @@ function kitMaterials() {
     stone: pbr('sandstone', { scale: 1 / 1.6, normal: 0.9 }),
     slate: pbr('slate', { scale: 1 / 1.4, normal: 1.1 }),
     concrete: pbr('concrete', { scale: 1 / 2, normal: 0.7 }),
-    grass: pbr('grass', { scale: 1 / 2.2, normal: 0.6 }),
+    grass: pbr('grass', { scale: 1 / 2.2, normal: 0.6, top: true }),
     earth: pbr('mud', { scale: 1 / 5, normal: 0.9 }),
     bark: pbr('bark', { scale: 1 / 1.1, normal: 1.4 }),
     planks: pbr('planks', { scale: 1 / 1.1, normal: 1 }),

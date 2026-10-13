@@ -236,8 +236,8 @@ export const texSet = key => ({
 });
 
 const pbrCache = new Map();
-export function pbr(key, { scale = 1, normal = 1, rough = 1, flat = true, vertexColors = true, extraVertex = '', extraUniforms = null } = {}) {
-  const id = `${key}-${scale}-${normal}-${rough}-${flat}-${vertexColors}-${extraVertex ? 'x' : ''}`;
+export function pbr(key, { scale = 1, normal = 1, rough = 1, vertexColors = true, top = false, extraVertex = '', extraUniforms = null } = {}) {
+  const id = `${key}-${scale}-${normal}-${rough}-${vertexColors}-${top}-${extraVertex ? 'x' : ''}`;
   if (pbrCache.has(id)) return pbrCache.get(id);
   const T = texSet(key);
   const m = new THREE.MeshStandardMaterial({ vertexColors, flatShading: false, roughness: 1, metalness: 0 });
@@ -251,40 +251,45 @@ export function pbr(key, { scale = 1, normal = 1, rough = 1, flat = true, vertex
       .replace(
         '#include <common>',
         `#include <common>
+        ${top ? '#define TRI_TOP' : ''}
         varying vec3 vTriP; varying vec3 vTriN;
         uniform sampler2D tDiff; uniform sampler2D tNor; uniform sampler2D tRough;
         uniform float uTriScale; uniform float uTriNormal; uniform float uTriRough;
-        vec3 triW() { vec3 w = pow(abs(normalize(vTriN)), vec3(6.0)); return w / (w.x + w.y + w.z); }`
+        vec2 axisUV(int a) { return (a == 0 ? vTriP.zy : a == 1 ? vTriP.xz : vTriP.xy) * uTriScale; }`
       )
       .replace(
         '#include <map_fragment>',
-        `vec3 tw = triW();
-        vec2 uvX = vTriP.zy * uTriScale; vec2 uvY = vTriP.xz * uTriScale; vec2 uvZ = vTriP.xy * uTriScale;
-        vec3 albedo = texture2D(tDiff, uvX).rgb * tw.x + texture2D(tDiff, uvY).rgb * tw.y + texture2D(tDiff, uvZ).rgb * tw.z;
+        `// Biplanar mapping (Inigo Quilez): only the two strongest projections
+        // are sampled for colour, the strongest one for roughness and normals.
+        vec3 nA = abs(normalize(vTriN));
+        #ifdef TRI_TOP
+          int ma = 1;
+          vec2 uvA = axisUV(1);
+          vec3 albedo = texture2D(tDiff, uvA).rgb;
+        #else
+          int ma = nA.x > nA.y ? (nA.x > nA.z ? 0 : 2) : (nA.y > nA.z ? 1 : 2);
+          int mi = nA.x < nA.y ? (nA.x < nA.z ? 0 : 2) : (nA.y < nA.z ? 1 : 2);
+          int me = 3 - ma - mi;
+          vec2 uvA = axisUV(ma);
+          vec2 bw = clamp((vec2(nA[ma], nA[me]) - 0.5773) / (1.0 - 0.5773), 0.0, 1.0);
+          vec3 albedo = (texture2D(tDiff, uvA).rgb * bw.x + texture2D(tDiff, axisUV(me)).rgb * bw.y) / (bw.x + bw.y + 1e-4);
+        #endif
         diffuseColor.rgb *= albedo;`
       )
-      .replace(
-        '#include <roughnessmap_fragment>',
-        `float roughnessFactor = roughness * uTriRough * (texture2D(tRough, uvX).g * tw.x + texture2D(tRough, uvY).g * tw.y + texture2D(tRough, uvZ).g * tw.z);`
-      )
+      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = roughness * uTriRough * texture2D(tRough, uvA).g;`)
       .replace(
         '#include <normal_fragment_maps>',
-        `{
-          // UDN-blended triplanar normal map (Ben Golus), built in world space
+        `// UDN-blended normal map on the dominant projection, skipped far away
+        if (length(vViewPosition) < 45.0) {
           vec3 nW = normalize(vTriN);
-          vec3 tX = texture2D(tNor, uvX).xyz * 2.0 - 1.0;
-          vec3 tY = texture2D(tNor, uvY).xyz * 2.0 - 1.0;
-          vec3 tZ = texture2D(tNor, uvZ).xyz * 2.0 - 1.0;
-          tX = vec3(tX.xy * uTriNormal + nW.zy, nW.x);
-          tY = vec3(tY.xy * uTriNormal + nW.xz, nW.y);
-          tZ = vec3(tZ.xy * uTriNormal + nW.xy, nW.z);
-          vec3 wn = normalize(tX.zyx * tw.x + tY.xzy * tw.y + tZ.xyz * tw.z);
-          normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+          vec3 tn = texture2D(tNor, uvA).xyz * 2.0 - 1.0;
+          vec3 wn = ma == 0 ? vec3(tn.xy * uTriNormal + nW.zy, nW.x).zyx : ma == 1 ? vec3(tn.xy * uTriNormal + nW.xz, nW.y).xzy : vec3(tn.xy * uTriNormal + nW.xy, nW.z);
+          normal = normalize((viewMatrix * vec4(normalize(wn), 0.0)).xyz);
         }`
       );
   };
-  // textures and scales are uniforms, so every triplanar material shares a program
-  m.customProgramCacheKey = () => `pbr-${vertexColors ? 'vc' : 'n'}-${extraVertex ? 'x' : ''}`;
+  // textures and scales are uniforms, so triplanar materials share programs
+  m.customProgramCacheKey = () => `pbr-${vertexColors ? 'vc' : 'n'}-${top ? 't' : 'b'}-${extraVertex ? 'x' : ''}`;
   pbrCache.set(id, m);
   return m;
 }
