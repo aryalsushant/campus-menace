@@ -15,8 +15,8 @@ export default function Effects({ tier }) {
   if (tier === 'high' && sun) {
     return (
       <EffectComposer multisampling={0} enableNormalPass={false} autoClear={false}>
-        <N8AO aoRadius={1.1} distanceFalloff={0.6} intensity={0.9} quality="performance" halfRes color="#2a1840" />
-        <GodRays sun={sun} samples={40} density={0.94} decay={0.93} weight={0.35} exposure={0.45} clampMax={1} kernelSize={KernelSize.SMALL} blur blendFunction={BlendFunction.SCREEN} />
+        <N8AO aoRadius={1.1} distanceFalloff={0.6} intensity={0.9} quality="performance" halfRes depthAwareUpsampling={false} color="#2a1840" />
+        <GodRays sun={sun} samples={22} density={0.94} decay={0.92} weight={0.38} exposure={0.45} clampMax={1} kernelSize={KernelSize.VERY_SMALL} resolutionScale={0.5} blur blendFunction={BlendFunction.SCREEN} />
         <Bloom mipmapBlur intensity={0.9} luminanceThreshold={0.92} luminanceSmoothing={0.2} radius={0.75} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         <HueSaturation saturation={0.14} />
@@ -29,7 +29,7 @@ export default function Effects({ tier }) {
   if (tier === 'high') {
     return (
       <EffectComposer multisampling={0} enableNormalPass={false}>
-        <N8AO aoRadius={1.1} distanceFalloff={0.6} intensity={0.9} quality="performance" halfRes color="#2a1840" />
+        <N8AO aoRadius={1.1} distanceFalloff={0.6} intensity={0.9} quality="performance" halfRes depthAwareUpsampling={false} color="#2a1840" />
         <Bloom mipmapBlur intensity={0.9} luminanceThreshold={0.92} luminanceSmoothing={0.2} radius={0.75} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         <HueSaturation saturation={0.14} />

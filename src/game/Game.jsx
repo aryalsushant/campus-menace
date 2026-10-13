@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
 import * as THREE from 'three';
@@ -17,6 +17,7 @@ import Effects from './render/Effects';
 import { Grass, Leaves, Fireflies } from './render/Nature';
 import SkyLife from './render/SkyLife';
 import Bystanders from './render/Bystanders';
+import PerfMeter from './render/PerfMeter';
 
 function Driver() {
   useFrame((_, dt) => tick(dt), -50);
@@ -44,11 +45,15 @@ export default function Game() {
     else setGame({ tier: quality });
   }, [quality]);
   const T = TIERS[tier];
+  // dynamic resolution: start near the top of the tier's range and let the
+  // performance monitor nudge it down or up with the measured frame rate
+  const [dpr, setDpr] = useState(() => Math.min(T.dpr[1], window.devicePixelRatio || 1));
+  useEffect(() => setDpr(Math.min(T.dpr[1], window.devicePixelRatio || 1)), [tier]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Canvas
       className="cm-canvas"
-      dpr={T.dpr}
+      dpr={dpr}
       shadows={T.shadows ? 'variance' : false}
       camera={{ fov: 62, near: 0.1, far: 700, position: [0, 4, 8] }}
       gl={{ antialias: tier === 'low', powerPreference: 'high-performance', stencil: false }}
@@ -61,8 +66,14 @@ export default function Game() {
       <PerformanceMonitor
         onDecline={() => getGame().quality === 'auto' && setGame({ tier: tierDown(getGame().tier) })}
         onIncline={() => getGame().quality === 'auto' && setGame({ tier: tierUp(getGame().tier) })}
+        onChange={({ factor }) => {
+          const [lo, hi] = TIERS[getGame().tier].dpr;
+          const cap = Math.min(hi, window.devicePixelRatio || 1);
+          setDpr(Math.round((lo + (cap - lo) * factor) * 20) / 20);
+        }}
         flipflops={3}
       />
+      <PerfMeter />
       <Driver />
       <Warmup />
       <Atmosphere shadows={T.shadows} shadowSize={T.shadowSize} />

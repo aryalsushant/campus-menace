@@ -1,8 +1,10 @@
 // Quality tiers. 'auto' starts from a device guess and adapts to frame rate.
 export const TIERS = {
-  low: { dpr: [0.75, 1.1], shadows: false, shadowSize: 1024 },
-  medium: { dpr: [1, 1.5], shadows: true, shadowSize: 1024 },
-  high: { dpr: [1, 2], shadows: true, shadowSize: 2048 },
+  // render scale range; dynamic resolution moves within it. Above ~1.5x the
+  // extra pixels are invisible next to SMAA but cost up to 1.8x more.
+  low: { dpr: [0.7, 1], shadows: false, shadowSize: 1024 },
+  medium: { dpr: [0.85, 1.25], shadows: true, shadowSize: 1024 },
+  high: { dpr: [1, 1.5], shadows: true, shadowSize: 2048 },
 };
 
 export function guessTier() {
