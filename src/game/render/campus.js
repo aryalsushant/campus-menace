@@ -130,6 +130,7 @@ export function makeKit(rnd) {
   const K = {};
   for (const k of KIT_KEYS) K[k] = new Builder(rnd.next);
   K.cards = new Cards();
+  K.wincards = new Cards();
   // aliases used by older helpers
   K.roof = K.slate;
   K.canopy = K.leaf;
@@ -137,6 +138,7 @@ export function makeKit(rnd) {
     const out = {};
     for (const k of KIT_KEYS) out[k] = K[k].build();
     out.cards = K.cards.build();
+    out.wincards = K.wincards.build();
     return out;
   };
   return K;

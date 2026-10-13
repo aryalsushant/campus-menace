@@ -85,8 +85,8 @@ const STONE = '#e8dcc6';
 // a classical column with base and capital
 function column(K, M, x, y, z, h, r = 0.3) {
   put(K.stone, M, new THREE.BoxGeometry(r * 2.6, 0.3, r * 2.6), [x, y + 0.15, z], STONE);
-  put(K.plaster, M, new THREE.CylinderGeometry(r * 0.88, r, h - 0.7, 16), [x, y + 0.3 + (h - 0.7) / 2, z], WHITE, [0, 0, 0], 1, 0);
-  put(K.plaster, M, new THREE.CylinderGeometry(r * 1.2, r * 0.9, 0.22, 16), [x, y + h - 0.3, z], WHITE);
+  put(K.plaster, M, new THREE.CylinderGeometry(r * 0.88, r, h - 0.7, 10), [x, y + 0.3 + (h - 0.7) / 2, z], WHITE, [0, 0, 0], 1, 0);
+  put(K.plaster, M, new THREE.CylinderGeometry(r * 1.2, r * 0.9, 0.22, 10), [x, y + h - 0.3, z], WHITE);
   put(K.stone, M, new THREE.BoxGeometry(r * 2.8, 0.18, r * 2.8), [x, y + h - 0.1, z], STONE);
 }
 
@@ -104,14 +104,17 @@ export function portico(K, M, { x = 0, z, w, h, cols = 4, depth = 2.6, y = 0 }) 
   put(K.windows, M, new THREE.CircleGeometry(0.9, 16, 0, Math.PI), [x, y + 2.82, z + 0.12], '#ffd78a', [0, 0, 0], 1, 0);
 }
 
-// multi-pane sash window with white frame, stone lintel + keystone and sill
+// sash window: a painted quad (frame, 6-over-6 muntins, glass) plus a
+// stone lintel with keystone and a sill for depth
+const _wc = new THREE.Vector3();
+const _wr = new THREE.Vector3();
+const _wu = new THREE.Vector3();
+const WHITE_TINT = new THREE.Color('#ffffff');
 function sashWindow(K, M, x, y, z, ww = 1.1, wh = 1.9, lit = 0.6) {
-  put(K.plaster, M, new THREE.BoxGeometry(ww + 0.22, wh + 0.22, 0.1), [x, y, z], WHITE, [0, 0, 0], 1, 0);
-  const glass = lit > 0.35 ? new THREE.Color('#ffd78a').multiplyScalar(0.7 + lit * 0.5) : new THREE.Color('#4a5a78');
-  put(K.windows, M, new THREE.PlaneGeometry(ww, wh), [x, y, z + 0.055], glass, [0, 0, 0], 1, 0);
-  // muntins: 6-over-6
-  for (const dx of [-ww / 6, ww / 6]) put(K.plaster, M, new THREE.BoxGeometry(0.04, wh, 0.03), [x + dx, y, z + 0.07], WHITE, [0, 0, 0], 1, 0);
-  for (const dy of [-wh / 4, 0, wh / 4]) put(K.plaster, M, new THREE.BoxGeometry(ww, dy === 0 ? 0.08 : 0.04, 0.03), [x, y + dy, z + 0.07], WHITE, [0, 0, 0], 1, 0);
+  _wc.set(x, y, z + 0.06).applyMatrix4(M);
+  _wr.set(1, 0, 0).transformDirection(M);
+  _wu.set(0, 1, 0).transformDirection(M);
+  K.wincards.quad(_wc, _wr, _wu, ww + 0.28, wh + 0.28, lit > 0.35 ? 0 : 1, WHITE_TINT, 0);
   put(K.stone, M, new THREE.BoxGeometry(ww + 0.5, 0.22, 0.16), [x, y + wh / 2 + 0.22, z + 0.02], STONE);
   put(K.stone, M, new THREE.BoxGeometry(0.26, 0.32, 0.2), [x, y + wh / 2 + 0.27, z + 0.04], STONE);
   put(K.stone, M, new THREE.BoxGeometry(ww + 0.35, 0.1, 0.22), [x, y - wh / 2 - 0.16, z + 0.05], STONE);
