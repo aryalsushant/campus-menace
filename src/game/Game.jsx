@@ -15,6 +15,7 @@ import Particles from './render/Particles';
 import CameraRig from './render/CameraRig';
 import Effects from './render/Effects';
 import { Grass, Leaves, Fireflies } from './render/Nature';
+import SkyLife from './render/SkyLife';
 
 function Driver() {
   useFrame((_, dt) => tick(dt), -50);
@@ -63,6 +64,7 @@ export default function Game() {
       {tier !== 'low' && <Grass key={tier} count={tier === 'high' ? 14000 : 6000} />}
       <Leaves count={tier === 'low' ? 40 : 90} />
       <Fireflies />
+      <SkyLife tier={tier} />
       <CameraRig />
       <Effects tier={tier} />
     </Canvas>
