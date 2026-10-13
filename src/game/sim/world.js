@@ -303,7 +303,6 @@ function knockDown(world, rd, how) {
       bornAt: world.t,
     });
   }
-  world.slowmo = how === 'can' ? 0.35 : 0.2;
   world.emit('takedown', { id: rd.id, how, s: rd.s, d: rd.d, kind: rd.kind, combo: world.combo });
 }
 
