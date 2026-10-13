@@ -1,5 +1,5 @@
 import { createRng } from './rng';
-import { RUN, RIDER, speedAt, difficultyAt, stageAt, AIR_SINGLE, AIR_DOUBLE } from './tune';
+import { RUN, RIDER, speedAt, difficultyAt, stageAt, AIR_SINGLE } from './tune';
 
 // Builds the run ahead of the player as alternating sections (open campus
 // areas full of action) and crossings (bridges, gaps, stones…).
@@ -32,7 +32,6 @@ const CROSS_UNLOCK = {
   gap: 140,
   stones: 340,
   narrow: 520,
-  doubleGap: 600,
   broken: 850,
   drop: 950,
   collapse: 1050,
@@ -485,7 +484,6 @@ export function createGenerator(seed) {
       ['bridge', [3, 1, 1][stage]],
       ['gap', [2, 2, 2][stage]],
       ['stones', [2, 1, 1.5][stage]],
-      ['doubleGap', [0.8, 1.5, 1.5][stage]],
       ['narrow', [1, 1.5, 1.2][stage]],
       ['broken', [0, 2, 1.2][stage]],
       ['drop', [0, 2, 1.4][stage]],
@@ -537,13 +535,12 @@ export function createGenerator(seed) {
         break;
       }
       case 'gap':
-      case 'doubleGap':
       case 'drop': {
-        const dh = type === 'drop' ? -rng.range(4.5, 8) : type === 'doubleGap' ? rng.range(-1.5, 0.3) : rng.range(-1.6, 0.6);
+        const dh = type === 'drop' ? -rng.range(4.5, 8) : rng.range(-1.6, 0.6);
         const single = jumpReach(v, dh);
         let gl;
-        if (type === 'doubleGap') gl = clamp(single * rng.range(1.15, 1.3), single + 1.5, v * AIR_DOUBLE * 0.72);
-        else gl = Math.max(2.6, single * rng.range(0.42, 0.62));
+        // one full jump clears it, with room for imperfect timing; never needs a double jump
+        gl = Math.max(3, single * rng.range(0.55, 0.7));
         len = Math.round(gl * 10) / 10;
         y1 = y0 + dh;
         seg.dh = dh;
@@ -553,7 +550,7 @@ export function createGenerator(seed) {
         const d = rng.range(-1.5, 1.5);
         for (let i = 1; i < n; i++) {
           const t = i / n;
-          world.pickups.push({ id: objId++, kind: 'pizza', s: s0 + len * t, d, y: y0 + (y1 - y0) * t + 1.2 + 4 * t * (1 - t) * (type === 'doubleGap' ? 2.6 : 1.4), taken: false });
+          world.pickups.push({ id: objId++, kind: 'pizza', s: s0 + len * t, d, y: y0 + (y1 - y0) * t + 1.2 + 4 * t * (1 - t) * 1.4, taken: false });
         }
         break;
       }

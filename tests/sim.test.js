@@ -142,6 +142,16 @@ describe('generator fairness', () => {
     }
   });
 
+  it('no crossing ever needs a double jump', () => {
+    for (const w of worlds) {
+      expect(w.segments.some(s => s.type === 'doubleGap')).toBe(false);
+      for (const sg of w.segments) {
+        if (sg.type !== 'gap' && sg.type !== 'drop') continue;
+        expect(sg.s1 - sg.s0).toBeLessThanOrEqual(jumpReach(speedAt(sg.s0) * 0.92, sg.dh) * 0.71);
+      }
+    }
+  });
+
   it('nothing blocks the run-up to a crossing', () => {
     for (const w of worlds) {
       const crossings = w.segments.filter(s => s.kind === 'crossing');
