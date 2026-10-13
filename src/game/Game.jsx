@@ -87,7 +87,7 @@ export default function Game() {
       <Riders />
       <Student />
       <Particles />
-      {tier !== 'low' && <Grass key={tier} count={tier === 'high' ? 14000 : 6000} />}
+      {tier !== 'low' && <Grass key={tier} count={tier === 'high' ? 9000 : 4500} />}
       <Leaves count={tier === 'low' ? 40 : 90} />
       <Fireflies />
       <SkyLife tier={tier} />

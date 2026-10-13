@@ -56,14 +56,15 @@ export function liveOak(K, x, y, z, rnd, size = 1) {
     const end = start.clone().addScaledVector(dir, reach).add(new THREE.Vector3(0, lift * rnd.range(0.75, 1.05), 0));
     const curve = limb(K, [start, mid, end], 0.34 * size, 0.08 * size, bark, 10);
     // leaf clusters along the outer two thirds and over the top
-    const clusters = rnd.int(9, 14);
+    // fewer, fuller clusters: same canopy, far less overdraw
+    const clusters = rnd.int(6, 8);
     for (let k = 0; k < clusters; k++) {
       const t = rnd.range(0.3, 1);
       const p = curve.getPointAt(t).add(new THREE.Vector3(rnd.range(-1.2, 1.2), rnd.range(0.2, 1.6), rnd.range(-1.2, 1.2)).multiplyScalar(size));
       leaf.set('#6e8c3e').offsetHSL(rnd.range(-0.03, 0.03), rnd.range(-0.05, 0.05), rnd.range(-0.06, 0.05));
-      const sz = rnd.range(2.2, 3.4) * size;
+      const sz = rnd.range(2.8, 4.0) * size;
       K.cards.flat(p, sz, TILE.oak, leaf, 1, rnd.range(0, 6.28), rnd.range(0.15, 0.6));
-      if (rnd.chance(0.55)) K.cards.cross(p.clone().add(new THREE.Vector3(0, 0.3, 0)), sz * 0.85, sz * 0.7, TILE.oak, leaf, 1, rnd.range(0, 6.28));
+      if (rnd.chance(0.4)) K.cards.cross(p.clone().add(new THREE.Vector3(0, 0.3, 0)), sz * 0.85, sz * 0.7, TILE.oak, leaf, 1, rnd.range(0, 6.28));
     }
     // Spanish moss hanging from the limb
     const moss = rnd.int(2, 4);
@@ -75,10 +76,10 @@ export function liveOak(K, x, y, z, rnd, size = 1) {
     }
   }
   // crown on top
-  for (let k = 0; k < 6; k++) {
-    const p = base.clone().add(new THREE.Vector3(rnd.range(-2.5, 2.5), trunkH + rnd.range(2.6, 4.2), rnd.range(-2.5, 2.5)).multiplyScalar(size));
+  for (let k = 0; k < 4; k++) {
+    const p = base.clone().add(new THREE.Vector3(rnd.range(-2.5, 2.5), trunkH + rnd.range(3.6, 5.2), rnd.range(-2.5, 2.5)).multiplyScalar(size));
     leaf.set('#78963f').offsetHSL(rnd.range(-0.03, 0.03), 0, rnd.range(-0.05, 0.06));
-    K.cards.flat(p, rnd.range(2.6, 3.6) * size, TILE.oak, leaf, 1, rnd.range(0, 6.28), rnd.range(0.05, 0.4));
+    K.cards.flat(p, rnd.range(3.2, 4.4) * size, TILE.oak, leaf, 1, rnd.range(0, 6.28), rnd.range(0.05, 0.4));
   }
 }
 
@@ -90,7 +91,7 @@ export function longleafPine(K, x, y, z, rnd, size = 1) {
   const top = base.clone().add(new THREE.Vector3(0, H, 0)).add(lean);
   const trunk = limb(K, [base.clone().add(new THREE.Vector3(0, -0.3, 0)), base.clone().add(new THREE.Vector3(0, H * 0.5, 0)).addScaledVector(lean, 0.4), top], 0.32 * size, 0.1 * size, tint('#7a5a44', rnd), 8);
   const green = new THREE.Color();
-  const branches = rnd.int(6, 10);
+  const branches = rnd.int(5, 7);
   for (let i = 0; i < branches; i++) {
     const t = rnd.range(0.62, 0.97);
     const p = trunk.getPointAt(t);
@@ -112,17 +113,17 @@ export function magnolia(K, x, y, z, rnd, size = 1) {
   const H = rnd.range(6, 8) * size;
   limb(K, [base.clone().add(new THREE.Vector3(0, -0.3, 0)), base.clone().add(new THREE.Vector3(0, H * 0.45, 0))], 0.28 * size, 0.18 * size, tint('#6e6458', rnd), 3);
   const green = new THREE.Color();
-  const layers = 6;
+  const layers = 5;
   for (let l = 0; l < layers; l++) {
     const t = l / (layers - 1);
     const r = (1 - t * 0.85) * 2.3 * size;
     const yy = y + 1.2 * size + t * (H - 1.4 * size);
-    const n = Math.max(3, Math.round(7 * (1 - t * 0.6)));
+    const n = Math.max(3, Math.round(5 * (1 - t * 0.5)));
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2 + l;
       const p = new THREE.Vector3(x + Math.cos(a) * r * 0.6, yy, z + Math.sin(a) * r * 0.6);
       green.set('#46663a').offsetHSL(rnd.range(-0.02, 0.02), 0, rnd.range(-0.04, 0.05));
-      K.cards.cross(p, r * 1.1, r * 1.0, TILE.magnolia, green, 0.5, a);
+      K.cards.cross(p, r * 1.3, r * 1.15, TILE.magnolia, green, 0.5, a);
     }
   }
 }

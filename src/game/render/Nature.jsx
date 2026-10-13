@@ -9,7 +9,7 @@ import { SKY } from './Atmosphere';
 // Grass blades on the lawns, drifting autumn leaves and night fireflies.
 // Everything is recycled around the player, so the cost is constant.
 
-const SPAN = 110; // metres of lawn kept populated ahead of the player
+const SPAN = 70; // metres of lawn kept populated ahead of the player (grass beyond is hidden by distance anyway)
 
 function bladeGeometry() {
   // a tapered blade: two triangles, tip colour lighter than the base
