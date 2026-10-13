@@ -21,6 +21,7 @@ export function createRunner(s = 4) {
     stumbleT: 0,
     shakenT: 0,
     invT: 0,
+    graceT: 0,
     scrapeT: 0,
     scrapeSide: 0,
     airT: 0,
@@ -47,6 +48,7 @@ export function stepRunner(r, inp, w, dt) {
   r.stumbleT = Math.max(0, r.stumbleT - dt);
   r.shakenT = Math.max(0, r.shakenT - dt);
   r.invT = Math.max(0, r.invT - dt);
+  r.graceT = Math.max(0, (r.graceT || 0) - dt);
   r.scrapeT = Math.max(0, r.scrapeT - dt);
   r.buffer = Math.max(0, r.buffer - dt);
   if (r.slideT > 0) {

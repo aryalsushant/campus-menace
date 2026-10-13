@@ -140,6 +140,7 @@ function hurt(world, cause, src) {
   }
   r.stumbleT = RUN.stumbleTime;
   r.shakenT = RUN.shakenTime;
+  r.graceT = 0.6; // plough through whatever else you touch while stumbling
   r.slideT = 0;
   world.stats.stumbles++;
   if (world.combo > 0) {
@@ -194,7 +195,7 @@ function updateObstacles(world, dt) {
     if (!blocked) continue;
     o.hit = true;
     o.hitAt = world.t;
-    const res = hurt(world, 'obstacle', o);
+    const res = r.graceT > 0 ? 'ignored' : hurt(world, 'obstacle', o);
     world.emit('obstacleHit', { id: o.id, model: o.model, result: res, s: o.s, d: o.d });
   }
 }
