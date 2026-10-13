@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
@@ -549,25 +549,158 @@ const Obstacle = memo(function Obstacle({ o }) {
       I.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 5 + o.id)) * 0.03;
     }
   }, -15);
-  const model = useRef();
-  useLayoutEffect(() => {
-    if (model.current && o.model !== 'goose' && o.model !== 'student' && o.model !== 'tourist') mergeStatic(model.current);
-  }, [o]);
   return (
     <group ref={ref}>
       <group ref={inner}>
-        <group ref={model}>
-          <ObstacleModel o={o} />
-        </group>
+        <ObstacleModel o={o} />
       </group>
     </group>
   );
 });
 
+// Rigged or animated obstacles keep their own component; every other model
+// is baked once per shape and drawn through one InstancedMesh per material,
+// so a spawn costs nothing and a screen full of obstacles is a few draws.
+const DYNAMIC = new Set(['student', 'tourist', 'goose']);
+const isStatic = o => !DYNAMIC.has(o.model);
+// widths are snapped to 25 cm for baking; the instance is then stretched
+// back to the exact hitbox width (at most a couple of percent)
+const bakeWidth = o => Math.max(0.25, Math.round(o.hw * 8) / 4);
+const bakeKey = o => `${o.model}|${o.kind}|${bakeWidth(o)}|${o.hd}|${o.clear || 0}|${o.model === 'clubBanner' ? o.id % CLUBS.length : 0}`;
+const baked = new Map(); // key -> [{ geometry, material, castShadow, receiveShadow }]
+
+function Baker({ k, o, onDone }) {
+  const ref = useRef();
+  useLayoutEffect(() => {
+    const g = ref.current;
+    mergeStatic(g);
+    g.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+    const parts = [];
+    g.traverse(c => {
+      if (!c.isMesh || Array.isArray(c.material)) return;
+      const geometry = c.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, c.matrixWorld));
+      geometry.computeBoundingSphere();
+      parts.push({ geometry, material: c.material, castShadow: c.castShadow, receiveShadow: c.receiveShadow });
+    });
+    baked.set(k, parts);
+    onDone();
+    // bake once per mount; the key fully describes the shape
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <group ref={ref}>
+      <ObstacleModel o={{ ...o, hw: bakeWidth(o) / 2 }} />
+    </group>
+  );
+}
+
+const _outer = new THREE.Matrix4();
+const _inner = new THREE.Matrix4();
+const _rot = new THREE.Matrix4();
+const _scale = new THREE.Matrix4();
+const _m4 = new THREE.Matrix4();
+
+function ObstacleBatch() {
+  useGame(s => s.objVersion);
+  const [, setBakes] = useState(0);
+  const onDone = useCallback(() => setBakes(n => n + 1), []);
+  const group = useRef();
+  const batches = useRef(new Map()); // key -> { meshes, cap }
+  const hitT = useRef(new WeakMap());
+  const w = useMemo(() => ({}), []);
+
+  // grow (or create) the instanced meshes for a baked shape
+  const batchFor = (k, need) => {
+    let b = batches.current.get(k);
+    if (b && b.cap >= need) return b;
+    const cap = Math.max(8, (b ? b.cap : 4) * 2, need);
+    if (b) for (const m of b.meshes) {
+      group.current.remove(m);
+      m.dispose();
+    }
+    const meshes = baked.get(k).map(p => {
+      const m = new THREE.InstancedMesh(p.geometry, p.material, cap);
+      m.castShadow = p.castShadow;
+      m.receiveShadow = p.receiveShadow;
+      m.frustumCulled = false;
+      m.count = 0;
+      group.current.add(m);
+      return m;
+    });
+    b = { meshes, cap, n: 0 };
+    batches.current.set(k, b);
+    return b;
+  };
+
+  useFrame((_, rawDt) => {
+    const world = runtime.world;
+    if (!world || !group.current) return;
+    const B = batches.current;
+    for (const b of B.values()) b.n = 0;
+    const r = world.runner;
+    const dt = Math.min(rawDt, 0.05) * runtime.timeScale;
+    for (const o of world.obstacles) {
+      if (!isStatic(o) || o.s < r.s - 10 || o.s > r.s + 340) continue;
+      const k = bakeKey(o);
+      if (!baked.has(k)) continue;
+      const b = B.get(k);
+      const n = b ? b.n : 0;
+      const batch = batchFor(k, n + 1);
+      // place: path frame, then the knocked-over tilt, then the width stretch
+      const h = toWorld(o.s, o.d, o.y, w);
+      let yaw = -h;
+      if (o.model === 'robot') yaw += o.vd > 0 ? -Math.PI / 2 : Math.PI / 2;
+      _outer.makeRotationY(yaw).setPosition(w.x, w.y, w.z);
+      if (o.hit) {
+        const t = (hitT.current.get(o) || 0) + dt;
+        hitT.current.set(o, t);
+        const q = Math.min(1, t / 0.35);
+        _rot.makeRotationX(-q * (o.kind === 'tall' ? 1.35 : 0.9));
+        _inner.makeTranslation(0, Math.sin(q * Math.PI) * 0.3, -q * 0.8).multiply(_rot);
+        _outer.multiply(_inner);
+      }
+      _scale.makeScale((o.hw * 2) / bakeWidth(o), 1, 1);
+      _m4.multiplyMatrices(_outer, _scale);
+      for (const m of batch.meshes) m.setMatrixAt(n, _m4);
+      batch.n = n + 1;
+    }
+    for (const b of B.values())
+      for (const m of b.meshes) {
+        if (m.count !== b.n) m.count = b.n;
+        if (b.n) m.instanceMatrix.needsUpdate = true;
+      }
+  }, -15);
+
+  // shapes that still need baking (each once, ever)
+  const pending = new Map();
+  if (runtime.world) for (const o of runtime.world.obstacles) if (isStatic(o)) {
+    const k = bakeKey(o);
+    if (!baked.has(k) && !pending.has(k)) pending.set(k, o);
+  }
+  return (
+    <>
+      <group ref={group} />
+      <group visible={false}>
+        {[...pending].map(([k, o]) => (
+          <Baker key={k} k={k} o={o} onDone={onDone} />
+        ))}
+      </group>
+    </>
+  );
+}
+
 export function Obstacles() {
   useGame(s => s.objVersion);
-  const list = runtime.world ? runtime.world.obstacles : [];
-  return list.map(o => <Obstacle key={o.id} o={o} />);
+  const list = runtime.world ? runtime.world.obstacles.filter(o => !isStatic(o)) : [];
+  return (
+    <>
+      <ObstacleBatch />
+      {list.map(o => (
+        <Obstacle key={o.id} o={o} />
+      ))}
+    </>
+  );
 }
 
 // --------------------------------------------------------- vending machines
@@ -684,6 +817,7 @@ export function Pickups() {
 }
 
 const POWER_COLORS = { magnet: '#ff3b5c', coffee: '#c8874a', hoodie: '#6fd3ff', sixpack: '#3dffb0', golden: '#ffd23f' };
+const RETICLE = new THREE.Color('#ff5a4a').multiplyScalar(2);
 const GOLD = new THREE.MeshStandardMaterial({ color: '#ffd23f', metalness: 0.9, roughness: 0.2, emissive: new THREE.Color('#ff9a1a'), emissiveIntensity: 0.6 });
 let goldGeo = null;
 function PowerModel() {
@@ -887,7 +1021,7 @@ export function AimLine() {
       <mesh ref={ref} geometry={geo} material={mat} frustumCulled={false} renderOrder={3} />
       <mesh ref={reticle} visible={false} renderOrder={4}>
         <ringGeometry args={[0.22, 0.3, 4]} />
-        <meshBasicMaterial color={new THREE.Color('#ff5a4a').multiplyScalar(2)} toneMapped={false} depthTest={false} transparent />
+        <meshBasicMaterial color={RETICLE} toneMapped={false} depthTest={false} transparent />
       </mesh>
     </>
   );
