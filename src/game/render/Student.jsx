@@ -4,6 +4,8 @@ import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, runnerLerp, toWorld } from '../core/runtime';
 import { on } from '../core/bus';
+import { withRim } from './materials';
+import { canAssets } from './props';
 
 // The student: athletic proportions, oversized backpack, procedural
 // animation driven by the simulation.
@@ -18,13 +20,13 @@ const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughn
 function useMats() {
   return useMemo(
     () => ({
-      skin: mat('#d9a27c', { roughness: 0.55 }),
-      hair: mat('#2a1a12', { roughness: 0.85 }),
-      jeans: mat('#3a5a8c', { roughness: 0.85 }),
+      skin: withRim(mat('#d9a27c', { roughness: 0.55 }), '#ffd9b8', 0.35),
+      hair: withRim(mat('#2a1a12', { roughness: 0.7 }), '#ffcf9a', 0.5),
+      jeans: withRim(mat('#3a5a8c', { roughness: 0.85 }), '#bcd4ff', 0.35),
       jeansDark: mat('#2e4a76', { roughness: 0.9 }),
-      hoodie: mat('#ff7a3d', { roughness: 0.78 }),
+      hoodie: withRim(mat('#ff7a3d', { roughness: 0.78 }), '#ffe0c0', 0.45),
       hoodieDark: mat('#d85f2a', { roughness: 0.8 }),
-      pack: mat('#3d6fe0', { roughness: 0.55 }),
+      pack: withRim(mat('#3d6fe0', { roughness: 0.5 }), '#cfe0ff', 0.5),
       packDark: mat('#2c55b8', { roughness: 0.6 }),
       shoe: mat('#f4f1ea', { roughness: 0.45 }),
       sole: mat('#ff4d6d', { roughness: 0.5 }),
@@ -32,7 +34,8 @@ function useMats() {
       phones: mat('#22252e', { roughness: 0.35, metalness: 0.3 }),
       cup: mat('#ffd23f', { roughness: 0.4 }),
       can: mat('#3dffb0', { roughness: 0.3, metalness: 0.6, emissive: new THREE.Color('#1aa070'), emissiveIntensity: 0.4 }),
-      white: mat('#ffffff'),
+      white: mat('#ffffff', { roughness: 0.3 }),
+      mouth: mat('#7a3a30'),
       star: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe14d').multiplyScalar(2), toneMapped: false }),
       shield: new THREE.MeshBasicMaterial({ color: new THREE.Color('#6fd3ff').multiplyScalar(1.6), transparent: true, opacity: 0.18, depthWrite: false, toneMapped: false }),
     }),
@@ -379,9 +382,9 @@ export default function Student() {
             <sphereGeometry args={[0.052, 10, 8]} />
           </mesh>
           {right && (
-            <mesh ref={canInHand} position={[0, -0.07, -0.02]} material={m.can} visible={false}>
-              <cylinderGeometry args={[0.045, 0.045, 0.15, 10]} />
-            </mesh>
+            <group ref={canInHand} position={[0, -0.07, -0.02]} scale={1.3} visible={false}>
+              <mesh geometry={canAssets().geo} material={canAssets().body} />
+            </group>
           )}
         </Seg>
       </Seg>
@@ -415,14 +418,39 @@ export default function Student() {
                 <RoundedBox args={[0.24, 0.29, 0.27]} radius={0.1} position={[0, 0.15, -0.01]} material={m.skin} castShadow />
                 <RoundedBox args={[0.26, 0.11, 0.29]} radius={0.05} position={[0, 0.28, 0.01]} material={m.hair} />
                 <RoundedBox args={[0.25, 0.2, 0.08]} radius={0.04} position={[0, 0.2, 0.12]} material={m.hair} />
-                {[-0.055, 0.055].map(x => (
-                  <mesh key={x} position={[x, 0.17, -0.145]} material={m.black}>
-                    <sphereGeometry args={[0.018, 6, 6]} />
+                {[-0.056, 0.056].map(x => (
+                  <group key={x} position={[x, 0.165, -0.138]}>
+                    <mesh scale={[1, 1.15, 0.5]} material={m.white}>
+                      <sphereGeometry args={[0.026, 10, 8]} />
+                    </mesh>
+                    <mesh position={[0, -0.002, -0.011]} material={m.black}>
+                      <sphereGeometry args={[0.014, 8, 6]} />
+                    </mesh>
+                    <mesh position={[0, 0.045, 0.002]} rotation={[0, 0, x > 0 ? -0.12 : 0.12]} material={m.hair}>
+                      <boxGeometry args={[0.05, 0.013, 0.012]} />
+                    </mesh>
+                  </group>
+                ))}
+                <mesh position={[0, 0.125, -0.15]} scale={[0.8, 1, 1]} material={m.skin}>
+                  <sphereGeometry args={[0.022, 8, 6]} />
+                </mesh>
+                <mesh position={[0, 0.075, -0.135]} material={m.mouth}>
+                  <boxGeometry args={[0.045, 0.01, 0.01]} />
+                </mesh>
+                {[-0.125, 0.125].map(x => (
+                  <mesh key={x} position={[x, 0.15, 0.01]} scale={[0.5, 1, 0.8]} material={m.skin}>
+                    <sphereGeometry args={[0.035, 8, 6]} />
                   </mesh>
                 ))}
-                <mesh position={[0, 0.215, -0.14]} rotation={[0, 0, 0]} material={m.hair}>
-                  <boxGeometry args={[0.16, 0.02, 0.01]} />
-                </mesh>
+                {/* messy hair tufts */}
+                {[
+                  [-0.07, 0.32, -0.08, 0.5],
+                  [0.0, 0.335, -0.1, 0.25],
+                  [0.07, 0.32, -0.07, -0.4],
+                  [0.04, 0.33, 0.04, -0.2],
+                ].map(([x, y, z, r], i) => (
+                  <RoundedBox key={i} args={[0.09, 0.06, 0.11]} radius={0.025} position={[x, y, z]} rotation={[-0.4, 0, r]} material={m.hair} />
+                ))}
                 {/* headphones */}
                 <mesh position={[0, 0.2, 0.0]} material={m.phones}>
                   <torusGeometry args={[0.145, 0.016, 6, 16, Math.PI]} />
@@ -447,9 +475,7 @@ export default function Student() {
                 <RoundedBox args={[0.46, 0.58, 0.28]} radius={0.1} position={[0, -0.27, 0.15]} material={m.pack} castShadow />
                 <RoundedBox args={[0.36, 0.24, 0.09]} radius={0.04} position={[0, -0.39, 0.3]} material={m.packDark} />
                 <RoundedBox args={[0.4, 0.07, 0.08]} radius={0.03} position={[0, 0.0, 0.1]} material={m.packDark} />
-                <mesh position={[0.25, -0.38, 0.16]} material={m.can}>
-                  <cylinderGeometry args={[0.045, 0.045, 0.15, 10]} />
-                </mesh>
+                <mesh position={[0.25, -0.36, 0.16]} scale={1.3} geometry={canAssets().geo} material={canAssets().body} />
                 <mesh position={[-0.16, -0.55, 0.33]} material={m.cup}>
                   <octahedronGeometry args={[0.035, 0]} />
                 </mesh>
