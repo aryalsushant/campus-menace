@@ -71,6 +71,15 @@ export default function CameraRig() {
     S.look.lerp(tmp.set(b.x, b.y, b.z), Math.min(1, dt * 10));
 
     camera.position.copy(S.pos);
+    // dev-only: look at the student from any offset (animation reviews)
+    if (import.meta.env.DEV && runtime.camOverride) {
+      const o = runtime.camOverride;
+      toWorld(q.s + o.s, q.d + o.d, q.y + o.y, a);
+      toWorld(q.s, q.d, q.y + 0.9, b);
+      camera.position.set(a.x, a.y, a.z);
+      camera.lookAt(b.x, b.y, b.z);
+      return;
+    }
     if (S.shake > 0 && !reduceMotion) {
       const k = S.shake * S.shake;
       camera.position.x += (Math.random() - 0.5) * k * 1.2;
