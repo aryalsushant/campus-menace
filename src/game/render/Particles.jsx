@@ -56,6 +56,7 @@ export default function Particles() {
     Array.from({ length: MAX }, () => ({ life: 0, max: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grav: 0, drag: 0, size: 0, r: 1, g: 1, b: 1 }))
   );
   const cursor = useRef(0);
+  const idle = useRef(false);
 
   useEffect(() => {
     const c = new THREE.Color();
@@ -124,6 +125,16 @@ export default function Particles() {
     const size = geo.attributes.size.array;
     const alpha = geo.attributes.alpha.array;
     const P = pool.current;
+    // nothing alive: skip the buffer work entirely
+    if (!pool.current.some(p => p.life > 0)) {
+      if (!idle.current) {
+        alpha.fill(0);
+        geo.attributes.alpha.needsUpdate = true;
+        idle.current = true;
+      }
+      return;
+    }
+    idle.current = false;
     for (let i = 0; i < MAX; i++) {
       const p = P[i];
       if (p.life <= 0) {

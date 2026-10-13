@@ -441,6 +441,7 @@ function Fireworks() {
     [P]
   );
   useFrame((_, dt) => {
+    if (!P.some(p => p.life > 0)) return;
     const pos = geo.attributes.position.array;
     const col = geo.attributes.color.array;
     for (let i = 0; i < COUNT; i++) {

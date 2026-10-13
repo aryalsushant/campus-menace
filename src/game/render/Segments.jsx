@@ -75,8 +75,10 @@ const Section = memo(function Section({ seg }) {
 function CollapsePlank({ geo, center, padId }) {
   const ref = useRef();
   const st = useRef({ fall: 0, vy: 0, spin: (Math.random() - 0.5) * 2 });
+  const padRef = useRef(null);
   useFrame((_, dt) => {
-    const pad = runtime.world.surfaces.pads.find(p => p.id === padId);
+    if (!padRef.current || padRef.current.id !== padId) padRef.current = runtime.world.surfaces.pads.find(p => p.id === padId) || null;
+    const pad = padRef.current && runtime.world.surfaces.pads.includes(padRef.current) ? padRef.current : null;
     const o = ref.current;
     if (!o) return;
     const t = runtime.world.t;
