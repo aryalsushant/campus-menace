@@ -15,7 +15,7 @@ function mats() {
   M = {
     yellow: std('#ffd23f'),
     black: std('#1d1d22'),
-    white: std('#f4f1ea'),
+    white: std('#f4f6f8', { flatShading: false, roughness: 0.35 }),
     orange: std('#ff7a2a'),
     red: std('#e8473f'),
     blue: std('#3d6fe0'),
@@ -35,6 +35,8 @@ function mats() {
     pants: std('#2b3242'),
     lampGlow: glow('#ffd9a0', 1.8),
     robotEye: glow('#3dffb0', 2),
+    robotLid: std('#e6e9ee', { flatShading: false, roughness: 0.4 }),
+    robotFlag: std('#ff6a1a', { emissive: new THREE.Color('#ff6a1a'), emissiveIntensity: 0.6 }),
     flag: glow('#ff3b30', 1.6),
   };
   return M;
@@ -280,25 +282,47 @@ function ObstacleModel({ o }) {
         </group>
       );
     case 'robot':
+      // sidewalk delivery robot: white tub on six wheels, flag on a whip antenna
       return (
         <group>
-          <RoundedBox args={[0.62, 0.48, 0.78]} radius={0.12} position={[0, 0.42, 0]} material={m.white} castShadow />
-          <mesh position={[0, 0.48, -0.4]} material={m.robotEye}>
-            <boxGeometry args={[0.4, 0.08, 0.02]} />
+          <RoundedBox args={[0.6, 0.38, 0.74]} radius={0.1} position={[0, 0.38, 0]} material={m.white} castShadow />
+          <RoundedBox args={[0.56, 0.12, 0.7]} radius={0.06} position={[0, 0.6, 0.01]} material={m.robotLid} castShadow />
+          <mesh position={[0, 0.555, 0]} material={m.black}>
+            <boxGeometry args={[0.61, 0.012, 0.75]} />
           </mesh>
-          <mesh position={[0.2, 0.95, 0.25]} material={m.dark}>
-            <cylinderGeometry args={[0.01, 0.01, 0.6, 4]} />
+          <RoundedBox args={[0.5, 0.16, 0.04]} radius={0.03} position={[0, 0.42, -0.375]} material={m.black} />
+          {[-0.12, 0.12].map(x => (
+            <mesh key={x} position={[x, 0.43, -0.4]} rotation={[Math.PI / 2, 0, 0]} material={m.robotEye}>
+              <cylinderGeometry args={[0.025, 0.025, 0.01, 10]} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.3, -0.372]} material={m.lampGlow}>
+            <boxGeometry args={[0.4, 0.03, 0.01]} />
           </mesh>
-          <mesh position={[0.2, 1.25, 0.25]} material={m.flag}>
-            <boxGeometry args={[0.16, 0.1, 0.01]} />
+          <mesh position={[0, 0.3, 0.372]} material={m.flag}>
+            <boxGeometry args={[0.4, 0.03, 0.01]} />
           </mesh>
-          {[-0.3, 0.3].map(x =>
-            [-0.25, 0.25].map(z => (
-              <mesh key={`${x}${z}`} position={[x, 0.12, z]} rotation={[0, 0, Math.PI / 2]} material={m.black}>
-                <cylinderGeometry args={[0.11, 0.11, 0.08, 10]} />
-              </mesh>
+          {[-1, 1].map(side =>
+            [-0.24, 0, 0.24].map(z => (
+              <group key={`${side}${z}`} position={[side * 0.31, 0.11, z]}>
+                <mesh rotation={[0, 0, Math.PI / 2]} material={m.black} castShadow>
+                  <cylinderGeometry args={[0.11, 0.11, 0.07, 14]} />
+                </mesh>
+                <mesh position={[side * 0.036, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={m.metal}>
+                  <cylinderGeometry args={[0.05, 0.05, 0.01, 10]} />
+                </mesh>
+              </group>
             ))
           )}
+          <mesh position={[0.2, 1.02, 0.28]} material={m.dark}>
+            <cylinderGeometry args={[0.008, 0.012, 0.9, 5]} />
+          </mesh>
+          <mesh position={[0.29, 1.38, 0.28]} material={m.robotFlag}>
+            <boxGeometry args={[0.18, 0.12, 0.01]} />
+          </mesh>
+          <mesh position={[0.2, 1.48, 0.28]} material={m.flag}>
+            <sphereGeometry args={[0.025, 6, 4]} />
+          </mesh>
         </group>
       );
     default:
