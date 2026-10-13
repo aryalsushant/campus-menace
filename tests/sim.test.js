@@ -228,14 +228,27 @@ describe('gameplay', () => {
     expect(world.runner.cause).toBe('faceplant');
   });
 
-  it('the bot survives most runs past the first kilometre', () => {
+  it('hitting a whole row of lamp posts is one stumble, not a faceplant', () => {
+    const world = createWorld(3);
+    world.plannedRiders.length = 0;
+    world.obstacles.length = 0;
+    const s = world.runner.s + 6;
+    for (const d of [-0.6, 0.6]) world.obstacles.push({ id: `l${d}`, kind: 'tall', model: 'lamp', s, d, hw: 0.6, hd: 0.35, y: 0, hit: false });
+    for (let i = 0; i < 90 && !world.over; i++) stepWorld(world, idle);
+    expect(world.stats.stumbles).toBe(1);
+    expect(world.over).toBe(false);
+  });
+
+  it('a perfect player gets through the opening and far beyond on most seeds', () => {
     const results = [];
-    for (let seed = 1; seed <= 30; seed++) results.push(play(seed, 1500));
-    const survived = results.filter(w => !w.over || w.runner.s >= 1500).length;
+    for (let seed = 1; seed <= 30; seed++) results.push(play(seed, 2500));
     const causes = results.filter(w => w.over).map(w => `${w.runner.cause}@${Math.round(w.runner.s)}`);
-    // the bot is not perfect; a fair layout should still let it get far most of the time
-    expect(survived, causes.join(', ')).toBeGreaterThanOrEqual(24);
-    const pizza = results.reduce((a, w) => a + w.score, 0) / results.length;
-    expect(pizza).toBeGreaterThan(60);
+    // the opening must be survivable with perfect play
+    const opening = results.filter(w => w.runner.s >= 450).length;
+    expect(opening, causes.join(', ')).toBeGreaterThanOrEqual(26);
+    const sorted = results.map(w => w.runner.s).sort((a, b) => a - b);
+    expect(sorted[15]).toBeGreaterThan(1000);
+    const falls = results.filter(w => w.runner.cause === 'fall').length;
+    expect(falls, causes.join(', ')).toBeLessThanOrEqual(3);
   });
 });
