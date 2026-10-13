@@ -4,6 +4,7 @@ import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, lerpEntity, toWorld } from '../core/runtime';
 import { on } from '../core/bus';
+import { withRim } from './materials';
 
 // Scooter riders. A fixed pool of models is assigned to live riders each
 // frame. Takedowns turn the rider and the scooter into tumbling debris.
@@ -15,6 +16,35 @@ const HAIRS = ['#1b1210', '#3a2418', '#7a4a20', '#d8b060', '#2a2a2a'];
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, ...o });
 const glowMat = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2.6), toneMapped: false });
+const HAIR_STYLES = ['short', 'cap', 'bun', 'long', 'buzz'];
+
+// limb helper: a tapered cylinder from the joint down `len`
+function Limb({ len, r, r2 = r * 0.85, material, rot = [0, 0, 0], pos = [0, 0, 0], children }) {
+  return (
+    <group position={pos} rotation={rot}>
+      <mesh position={[0, -len / 2, 0]} material={material} castShadow>
+        <cylinderGeometry args={[r, r2, len, 10]} />
+      </mesh>
+      <mesh material={material}>
+        <sphereGeometry args={[r, 10, 8]} />
+      </mesh>
+      <group position={[0, -len, 0]}>{children}</group>
+    </group>
+  );
+}
+
+function Wheel({ z, mats }) {
+  return (
+    <group position={[0, 0.1, z]} rotation={[0, Math.PI / 2, 0]}>
+      <mesh material={mats.tire} castShadow>
+        <torusGeometry args={[0.078, 0.026, 10, 20]} />
+      </mesh>
+      <mesh material={mats.hub}>
+        <cylinderGeometry args={[0.05, 0.05, 0.05, 14]} />
+      </mesh>
+    </group>
+  );
+}
 
 function RiderModel({ slot }) {
   const root = useRef();
@@ -23,18 +53,32 @@ function RiderModel({ slot }) {
   const ring = useRef();
   const legs = useRef();
   const armPhone = useRef();
+  const look = useMemo(() => {
+    const rnd = (k, n) => (slot * 7 + k * 13) % n;
+    return { hair: HAIR_STYLES[rnd(1, HAIR_STYLES.length)], pack: slot % 3 === 0, beanie: slot % 5 === 4 };
+  }, [slot]);
   const mats = useMemo(
     () => ({
-      outfit: std(OUTFITS[slot % OUTFITS.length]),
+      outfit: withRim(std(OUTFITS[slot % OUTFITS.length], { roughness: 0.75 }), '#ffe6c8', 0.45),
+      outfitDark: std(new THREE.Color(OUTFITS[slot % OUTFITS.length]).multiplyScalar(0.7), { roughness: 0.8 }),
       pants: std(slot % 3 ? '#2b3242' : '#4a5a7a', { roughness: 0.85 }),
-      skin: std(SKINS[slot % SKINS.length]),
+      shoe: std(slot % 2 ? '#f2f2f2' : '#1e1e22', { roughness: 0.5 }),
+      skin: withRim(std(SKINS[slot % SKINS.length], { roughness: 0.55 }), '#ffd9b8', 0.3),
       hair: std(HAIRS[(slot * 3) % HAIRS.length], { roughness: 0.85 }),
-      deck: std('#22252e', { roughness: 0.4, metalness: 0.4 }),
-      stem: std('#c9ced8', { roughness: 0.3, metalness: 0.7 }),
-      wheel: std('#151515', { roughness: 0.6 }),
+      cap: std(['#e8473f', '#2f6fe8', '#1f1f1f', '#f2c63a'][slot % 4], { roughness: 0.7 }),
+      pack: std(['#2fbf8f', '#e8476a', '#3d3d48'][slot % 3], { roughness: 0.6 }),
+      deck: std('#2a2d35', { roughness: 0.45, metalness: 0.4 }),
+      grip: std('#121214', { roughness: 0.95 }),
+      stem: std('#cfd5de', { roughness: 0.25, metalness: 0.85 }),
+      accent: std(['#3dffb0', '#9be15d', '#3fb4e8'][slot % 3], { roughness: 0.4, metalness: 0.3 }),
+      tire: std('#141416', { roughness: 0.8 }),
+      hub: std('#9aa3ad', { roughness: 0.35, metalness: 0.8 }),
       led: glowMat('#ff3b30'),
+      head: glowMat('#fff4d6'),
       phone: glowMat('#9fd8ff'),
       white: std('#ffffff'),
+      black: std('#111111'),
+      beam: new THREE.MeshBasicMaterial({ color: '#fff4d6', transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
       ring: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff3b30').multiplyScalar(1.6), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }),
     }),
     [slot]
@@ -43,63 +87,148 @@ function RiderModel({ slot }) {
     runtime.riderSlots = runtime.riderSlots || [];
     runtime.riderSlots[slot] = { root, person, scooter, ring, legs, armPhone };
   }, [slot]);
+  const M = mats;
   return (
     <group ref={root} visible={false}>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} material={mats.ring}>
-        <ringGeometry args={[0.7, 0.95, 24]} />
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} material={M.ring}>
+        <ringGeometry args={[0.75, 1.0, 28]} />
       </mesh>
+      {/* ------------------------------------------------ e-scooter */}
       <group ref={scooter}>
-        <RoundedBox args={[0.24, 0.07, 1.05]} radius={0.03} position={[0, 0.16, 0]} material={mats.deck} castShadow />
-        <mesh position={[0.125, 0.16, 0]} material={mats.led}>
-          <boxGeometry args={[0.02, 0.03, 0.9]} />
+        <RoundedBox args={[0.19, 0.06, 0.66]} radius={0.025} position={[0, 0.16, 0.02]} material={M.deck} castShadow />
+        <mesh position={[0, 0.193, 0.02]} material={M.grip}>
+          <boxGeometry args={[0.165, 0.008, 0.56]} />
         </mesh>
-        <mesh position={[-0.125, 0.16, 0]} material={mats.led}>
-          <boxGeometry args={[0.02, 0.03, 0.9]} />
-        </mesh>
-        <mesh position={[0, 0.7, -0.5]} rotation={[0.18, 0, 0]} material={mats.stem} castShadow>
-          <cylinderGeometry args={[0.028, 0.028, 1.1, 8]} />
-        </mesh>
-        <mesh position={[0, 1.24, -0.6]} rotation={[0, 0, Math.PI / 2]} material={mats.stem}>
-          <cylinderGeometry args={[0.022, 0.022, 0.5, 8]} />
-        </mesh>
-        <mesh position={[0, 1.18, -0.62]} material={mats.led}>
-          <sphereGeometry args={[0.05, 8, 6]} />
-        </mesh>
-        {[-0.5, 0.48].map(z => (
-          <mesh key={z} position={[0, 0.1, z]} rotation={[0, 0, Math.PI / 2]} material={mats.wheel} castShadow>
-            <cylinderGeometry args={[0.1, 0.1, 0.07, 12]} />
+        {[-1, 1].map(sd => (
+          <mesh key={sd} position={[sd * 0.097, 0.15, 0.02]} material={M.led}>
+            <boxGeometry args={[0.008, 0.018, 0.56]} />
           </mesh>
         ))}
+        <mesh position={[0, 0.17, 0.34]} material={M.accent}>
+          <boxGeometry args={[0.15, 0.04, 0.06]} />
+        </mesh>
+        {/* rear fender + brake light */}
+        <mesh position={[0, 0.12, 0.4]} rotation={[0, Math.PI / 2, 0]} material={M.deck}>
+          <torusGeometry args={[0.11, 0.022, 6, 14, Math.PI]} />
+        </mesh>
+        <mesh position={[0, 0.2, 0.5]} material={M.led}>
+          <boxGeometry args={[0.06, 0.025, 0.01]} />
+        </mesh>
+        <Wheel z={0.4} mats={M} />
+        <Wheel z={-0.42} mats={M} />
+        {/* fork + stem, handlebar, grips, display, headlight */}
+        <mesh position={[0, 0.62, -0.47]} rotation={[0.1, 0, 0]} material={M.stem} castShadow>
+          <cylinderGeometry args={[0.026, 0.03, 1.05, 10]} />
+        </mesh>
+        <mesh position={[0, 0.27, -0.42]} rotation={[0.1, 0, 0]} material={M.deck}>
+          <boxGeometry args={[0.07, 0.24, 0.05]} />
+        </mesh>
+        <mesh position={[0, 1.13, -0.52]} rotation={[0, 0, Math.PI / 2]} material={M.stem}>
+          <cylinderGeometry args={[0.018, 0.018, 0.5, 8]} />
+        </mesh>
+        {[-1, 1].map(sd => (
+          <mesh key={sd} position={[sd * 0.22, 1.13, -0.52]} rotation={[0, 0, Math.PI / 2]} material={M.grip}>
+            <cylinderGeometry args={[0.024, 0.024, 0.1, 8]} />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.15, -0.5]} rotation={[-0.6, 0, 0]} material={M.phone}>
+          <boxGeometry args={[0.07, 0.04, 0.008]} />
+        </mesh>
+        <mesh position={[0, 1.02, -0.55]} material={M.head}>
+          <sphereGeometry args={[0.035, 10, 8]} />
+        </mesh>
+        <mesh position={[0, 0.8, -2.2]} rotation={[-Math.PI / 2 - 0.12, 0, 0]} material={M.beam}>
+          <coneGeometry args={[0.8, 3.4, 16, 1, true]} />
+        </mesh>
       </group>
+      {/* ------------------------------------------------ rider */}
       <group ref={person} position={[0, 0.2, 0.05]}>
         <group ref={legs}>
-          {[-0.1, 0.1].map((x, i) => (
-            <mesh key={x} position={[x, 0.42, i ? 0.12 : -0.12]} material={mats.pants} castShadow>
-              <capsuleGeometry args={[0.08, 0.66, 3, 8]} />
-            </mesh>
-          ))}
+          {/* front leg slightly bent, back leg braced */}
+          <Limb pos={[-0.09, 0.92, -0.02]} rot={[0.12, 0, 0]} len={0.43} r={0.075} material={M.pants}>
+            <Limb rot={[-0.2, 0, 0]} len={0.42} r={0.062} material={M.pants}>
+              <RoundedBox args={[0.11, 0.08, 0.25]} radius={0.03} position={[0, -0.03, -0.05]} material={M.shoe} castShadow />
+            </Limb>
+          </Limb>
+          <Limb pos={[0.09, 0.92, 0.04]} rot={[-0.22, 0, 0]} len={0.43} r={0.075} material={M.pants}>
+            <Limb rot={[0.3, 0, 0]} len={0.42} r={0.062} material={M.pants}>
+              <RoundedBox args={[0.11, 0.08, 0.25]} radius={0.03} position={[0, -0.03, -0.05]} material={M.shoe} castShadow />
+            </Limb>
+          </Limb>
         </group>
-        <RoundedBox args={[0.46, 0.56, 0.3]} radius={0.09} position={[0, 1.08, 0]} material={mats.outfit} castShadow />
-        <RoundedBox args={[0.36, 0.38, 0.36]} radius={0.13} position={[0, 1.58, 0]} material={mats.skin} castShadow />
-        <RoundedBox args={[0.39, 0.16, 0.39]} radius={0.07} position={[0, 1.73, 0.02]} material={mats.hair} />
-        {/* AirPods */}
-        {[-0.19, 0.19].map(x => (
-          <mesh key={x} position={[x, 1.56, 0]} material={mats.white}>
-            <sphereGeometry args={[0.035, 6, 4]} />
+        <group position={[0, 0.94, 0]} rotation={[-0.12, 0, 0]}>
+          <RoundedBox args={[0.34, 0.16, 0.22]} radius={0.06} position={[0, 0.02, 0]} material={M.pants} />
+          <RoundedBox args={[0.4, 0.52, 0.25]} radius={0.1} position={[0, 0.34, 0]} material={M.outfit} castShadow />
+          <RoundedBox args={[0.3, 0.12, 0.13]} radius={0.05} position={[0, 0.58, 0.09]} material={M.outfitDark} />
+          <mesh position={[0, 0.34, -0.126]} material={M.outfitDark}>
+            <boxGeometry args={[0.012, 0.46, 0.005]} />
           </mesh>
-        ))}
-        {/* left hand on the bar */}
-        <mesh position={[-0.24, 1.1, -0.35]} rotation={[1.1, 0, 0.2]} material={mats.outfit} castShadow>
-          <capsuleGeometry args={[0.065, 0.42, 3, 6]} />
-        </mesh>
-        {/* right hand holding a phone up to the face */}
-        <group ref={armPhone} position={[0.24, 1.28, 0]}>
-          <mesh position={[0, -0.06, -0.16]} rotation={[1.2, 0, -0.3]} material={mats.outfit} castShadow>
-            <capsuleGeometry args={[0.065, 0.3, 3, 6]} />
+          {look.pack && <RoundedBox args={[0.32, 0.4, 0.16]} radius={0.07} position={[0, 0.34, 0.2]} material={M.pack} castShadow />}
+          {/* neck + head, tilted down at the phone */}
+          <mesh position={[0, 0.63, 0]} material={M.skin}>
+            <cylinderGeometry args={[0.05, 0.055, 0.08, 10]} />
           </mesh>
-          <mesh position={[-0.08, 0.16, -0.32]} rotation={[0.2, 0, 0]} material={mats.phone}>
-            <boxGeometry args={[0.1, 0.18, 0.015]} />
-          </mesh>
+          <group position={[0, 0.66, -0.01]} rotation={[0.3, 0, 0]}>
+            <RoundedBox args={[0.21, 0.26, 0.24]} radius={0.09} position={[0, 0.14, 0]} material={M.skin} castShadow />
+            {[-0.05, 0.05].map(x => (
+              <mesh key={x} position={[x, 0.15, -0.122]} material={M.black}>
+                <sphereGeometry args={[0.015, 6, 6]} />
+              </mesh>
+            ))}
+            {[-0.112, 0.112].map(x => (
+              <mesh key={x} position={[x, 0.12, 0.01]} material={M.white}>
+                <capsuleGeometry args={[0.014, 0.03, 2, 6]} />
+              </mesh>
+            ))}
+            {look.hair === 'cap' && (
+              <>
+                <RoundedBox args={[0.23, 0.1, 0.25]} radius={0.05} position={[0, 0.27, 0.01]} material={M.cap} />
+                <mesh position={[0, 0.235, -0.15]} material={M.cap}>
+                  <boxGeometry args={[0.18, 0.02, 0.12]} />
+                </mesh>
+              </>
+            )}
+            {look.hair === 'short' && <RoundedBox args={[0.23, 0.09, 0.26]} radius={0.04} position={[0, 0.27, 0.01]} material={M.hair} />}
+            {look.hair === 'buzz' && <RoundedBox args={[0.22, 0.05, 0.25]} radius={0.025} position={[0, 0.26, 0.005]} material={M.hair} />}
+            {look.hair === 'bun' && (
+              <>
+                <RoundedBox args={[0.23, 0.09, 0.26]} radius={0.04} position={[0, 0.27, 0.01]} material={M.hair} />
+                <mesh position={[0, 0.33, 0.08]} material={M.hair}>
+                  <sphereGeometry args={[0.06, 10, 8]} />
+                </mesh>
+              </>
+            )}
+            {look.hair === 'long' && (
+              <>
+                <RoundedBox args={[0.24, 0.1, 0.27]} radius={0.05} position={[0, 0.27, 0.01]} material={M.hair} />
+                <RoundedBox args={[0.22, 0.32, 0.06]} radius={0.03} position={[0, 0.08, 0.12]} material={M.hair} />
+              </>
+            )}
+          </group>
+          {/* left hand on the bar */}
+          <Limb pos={[-0.21, 0.54, 0]} rot={[1.05, 0, 0.18]} len={0.3} r={0.055} material={M.outfit}>
+            <Limb rot={[-0.2, 0, -0.1]} len={0.3} r={0.048} material={M.outfit}>
+              <mesh material={M.skin}>
+                <sphereGeometry args={[0.045, 8, 6]} />
+              </mesh>
+            </Limb>
+          </Limb>
+          {/* right hand holding the phone up to the face */}
+          <group ref={armPhone} position={[0.21, 0.54, 0]}>
+            <Limb rot={[0.55, 0, -0.25]} len={0.29} r={0.055} material={M.outfit}>
+              <Limb rot={[1.75, 0, 0.35]} len={0.27} r={0.048} material={M.outfit}>
+                <mesh material={M.skin}>
+                  <sphereGeometry args={[0.045, 8, 6]} />
+                </mesh>
+                <mesh position={[0, -0.04, -0.03]} rotation={[0.5, 0, 0]} material={M.black}>
+                  <boxGeometry args={[0.08, 0.15, 0.012]} />
+                </mesh>
+                <mesh position={[0, -0.04, -0.023]} rotation={[0.5, 0, 0]} material={M.phone}>
+                  <boxGeometry args={[0.07, 0.135, 0.004]} />
+                </mesh>
+              </Limb>
+            </Limb>
+          </group>
         </group>
       </group>
     </group>
@@ -185,7 +314,7 @@ export default function Riders() {
       root.rotation.set(0, -h + yawLocal, 0);
       const born = Math.min(1, (world.t - rd.bornAt) / 0.35);
       root.scale.setScalar(0.4 + 0.6 * born);
-      sl.person.current.position.set(0, 0.2 + Math.sin(t * 9 + rd.id) * 0.01, 0.05);
+      sl.person.current.position.set(0, 0.2 + Math.sin(t * 9 + rd.id) * 0.012, 0.05);
       sl.person.current.rotation.set(0, 0, THREE.MathUtils.clamp(-lean * 0.08, -0.35, 0.35));
       sl.scooter.current.position.set(0, 0, 0);
       sl.scooter.current.rotation.set(0, 0, THREE.MathUtils.clamp(-lean * 0.05, -0.25, 0.25));
