@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, tick, fastForward } from './core/runtime';
+import { createBot } from './sim/bot';
 import { useGame, getGame, setGame } from './core/store';
 import { TIERS, guessTier, tierDown, tierUp } from './core/quality';
 import Atmosphere from './render/Atmosphere';
@@ -38,7 +39,7 @@ export default function Game() {
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.outputColorSpace = THREE.SRGBColorSpace;
-        if (import.meta.env.DEV) window.__cm = { runtime, gl, getGame, setGame, fastForward };
+        if (import.meta.env.DEV) window.__cm = { runtime, gl, getGame, setGame, fastForward, botPlay: () => { const b = createBot(); runtime.input = () => b.think(runtime.world); } };
       }}
     >
       <PerformanceMonitor

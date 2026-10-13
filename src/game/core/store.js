@@ -37,6 +37,11 @@ export const useGame = create(set => ({
   tiltSensitivity: read('tilt', 1),
   steerMode: read('steerMode', 'tilt'), // phones: 'tilt' | 'drag'
   segVersion: 0,
+  session: null,
+  profile: null,
+  authReady: false,
+  stats: null,
+  runCount: 0,
   objVersion: 0,
   set,
 }));
