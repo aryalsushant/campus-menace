@@ -5,33 +5,15 @@ import * as THREE from 'three';
 import { runtime, lerpEntity, toWorld } from '../core/runtime';
 import { on } from '../core/bus';
 import { withRim } from './materials';
+import { loadPeople, makePerson, randomLook, attach, bindPosition } from './people';
 
 // Scooter riders. A fixed pool of models is assigned to live riders each
 // frame. Takedowns turn the rider and the scooter into tumbling debris.
 
 const POOL = 12;
-const OUTFITS = ['#3fb4e8', '#8f5fe8', '#e8476a', '#2fbf8f', '#f2c63a', '#6b7280', '#ff8a3d', '#1f2937'];
-const SKINS = ['#f1c7a3', '#d9a07a', '#a96f4a', '#7a4a2f', '#f5d6bf'];
-const HAIRS = ['#1b1210', '#3a2418', '#7a4a20', '#d8b060', '#2a2a2a'];
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, ...o });
 const glowMat = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2.6), toneMapped: false });
-const HAIR_STYLES = ['short', 'cap', 'bun', 'long', 'buzz'];
-
-// limb helper: a tapered cylinder from the joint down `len`
-function Limb({ len, r, r2 = r * 0.85, material, rot = [0, 0, 0], pos = [0, 0, 0], children }) {
-  return (
-    <group position={pos} rotation={rot}>
-      <mesh position={[0, -len / 2, 0]} material={material} castShadow>
-        <cylinderGeometry args={[r, r2, len, 10]} />
-      </mesh>
-      <mesh material={material}>
-        <sphereGeometry args={[r, 10, 8]} />
-      </mesh>
-      <group position={[0, -len, 0]}>{children}</group>
-    </group>
-  );
-}
 
 function Wheel({ z, mats }) {
   return (
@@ -51,22 +33,8 @@ function RiderModel({ slot }) {
   const person = useRef();
   const scooter = useRef();
   const ring = useRef();
-  const legs = useRef();
-  const armPhone = useRef();
-  const look = useMemo(() => {
-    const rnd = (k, n) => (slot * 7 + k * 13) % n;
-    return { hair: HAIR_STYLES[rnd(1, HAIR_STYLES.length)], pack: slot % 3 === 0, beanie: slot % 5 === 4 };
-  }, [slot]);
   const mats = useMemo(
     () => ({
-      outfit: withRim(std(OUTFITS[slot % OUTFITS.length], { roughness: 0.75 }), '#ffe6c8', 0.45),
-      outfitDark: std(new THREE.Color(OUTFITS[slot % OUTFITS.length]).multiplyScalar(0.7), { roughness: 0.8 }),
-      pants: std(slot % 3 ? '#2b3242' : '#4a5a7a', { roughness: 0.85 }),
-      shoe: std(slot % 2 ? '#f2f2f2' : '#1e1e22', { roughness: 0.5 }),
-      skin: withRim(std(SKINS[slot % SKINS.length], { roughness: 0.55 }), '#ffd9b8', 0.3),
-      hair: std(HAIRS[(slot * 3) % HAIRS.length], { roughness: 0.85 }),
-      cap: std(['#e8473f', '#2f6fe8', '#1f1f1f', '#f2c63a'][slot % 4], { roughness: 0.7 }),
-      pack: std(['#2fbf8f', '#e8476a', '#3d3d48'][slot % 3], { roughness: 0.6 }),
       deck: std('#2a2d35', { roughness: 0.45, metalness: 0.4 }),
       grip: std('#121214', { roughness: 0.95 }),
       stem: std('#cfd5de', { roughness: 0.25, metalness: 0.85 }),
@@ -76,17 +44,37 @@ function RiderModel({ slot }) {
       led: glowMat('#ff3b30'),
       head: glowMat('#fff4d6'),
       phone: glowMat('#9fd8ff'),
-      white: std('#ffffff'),
       black: std('#111111'),
       beam: new THREE.MeshBasicMaterial({ color: '#fff4d6', transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
       ring: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff3b30').multiplyScalar(1.6), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }),
     }),
     [slot]
   );
+  const rig = useRef(null);
   useEffect(() => {
     runtime.riderSlots = runtime.riderSlots || [];
-    runtime.riderSlots[slot] = { root, person, scooter, ring, legs, armPhone };
-  }, [slot]);
+    runtime.riderSlots[slot] = { root, person, scooter, ring, rig };
+    let live = true;
+    loadPeople().then(() => {
+      if (!live || !person.current) return;
+      const look = randomLook(slot * 7919 + 13);
+      const p = makePerson({ ...look, outfit: { ...look.outfit, rim: '#ffd9b8', rimStrength: 0.35 } });
+      // both hands low and forward: texting while riding
+      p.play('Pistol_Aim_Down');
+      const hand = bindPosition(p, 'hand_r');
+      const phone = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.15, 0.012), mats.black);
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.135, 0.004), mats.phone);
+      screen.position.z = 0.008;
+      phone.add(body, screen);
+      attach(p, 'hand_r', phone, { pos: [hand.x - 0.05, hand.y + 0.02, hand.z + 0.06], rot: [-0.9, 0, 0] });
+      person.current.add(p.root);
+      rig.current = p;
+    });
+    return () => {
+      live = false;
+    };
+  }, [slot, mats]);
   const M = mats;
   return (
     <group ref={root} visible={false}>
@@ -141,96 +129,8 @@ function RiderModel({ slot }) {
           <coneGeometry args={[0.8, 3.4, 16, 1, true]} />
         </mesh>
       </group>
-      {/* ------------------------------------------------ rider */}
-      <group ref={person} position={[0, 0.2, 0.05]}>
-        <group ref={legs}>
-          {/* front leg slightly bent, back leg braced */}
-          <Limb pos={[-0.09, 0.92, -0.02]} rot={[0.12, 0, 0]} len={0.43} r={0.075} material={M.pants}>
-            <Limb rot={[-0.2, 0, 0]} len={0.42} r={0.062} material={M.pants}>
-              <RoundedBox args={[0.11, 0.08, 0.25]} radius={0.03} position={[0, -0.03, -0.05]} material={M.shoe} castShadow />
-            </Limb>
-          </Limb>
-          <Limb pos={[0.09, 0.92, 0.04]} rot={[-0.22, 0, 0]} len={0.43} r={0.075} material={M.pants}>
-            <Limb rot={[0.3, 0, 0]} len={0.42} r={0.062} material={M.pants}>
-              <RoundedBox args={[0.11, 0.08, 0.25]} radius={0.03} position={[0, -0.03, -0.05]} material={M.shoe} castShadow />
-            </Limb>
-          </Limb>
-        </group>
-        <group position={[0, 0.94, 0]} rotation={[-0.12, 0, 0]}>
-          <RoundedBox args={[0.34, 0.16, 0.22]} radius={0.06} position={[0, 0.02, 0]} material={M.pants} />
-          <RoundedBox args={[0.4, 0.52, 0.25]} radius={0.1} position={[0, 0.34, 0]} material={M.outfit} castShadow />
-          <RoundedBox args={[0.3, 0.12, 0.13]} radius={0.05} position={[0, 0.58, 0.09]} material={M.outfitDark} />
-          <mesh position={[0, 0.34, -0.126]} material={M.outfitDark}>
-            <boxGeometry args={[0.012, 0.46, 0.005]} />
-          </mesh>
-          {look.pack && <RoundedBox args={[0.32, 0.4, 0.16]} radius={0.07} position={[0, 0.34, 0.2]} material={M.pack} castShadow />}
-          {/* neck + head, tilted down at the phone */}
-          <mesh position={[0, 0.63, 0]} material={M.skin}>
-            <cylinderGeometry args={[0.05, 0.055, 0.08, 10]} />
-          </mesh>
-          <group position={[0, 0.66, -0.01]} rotation={[0.3, 0, 0]}>
-            <RoundedBox args={[0.21, 0.26, 0.24]} radius={0.09} position={[0, 0.14, 0]} material={M.skin} castShadow />
-            {[-0.05, 0.05].map(x => (
-              <mesh key={x} position={[x, 0.15, -0.122]} material={M.black}>
-                <sphereGeometry args={[0.015, 6, 6]} />
-              </mesh>
-            ))}
-            {[-0.112, 0.112].map(x => (
-              <mesh key={x} position={[x, 0.12, 0.01]} material={M.white}>
-                <capsuleGeometry args={[0.014, 0.03, 2, 6]} />
-              </mesh>
-            ))}
-            {look.hair === 'cap' && (
-              <>
-                <RoundedBox args={[0.23, 0.1, 0.25]} radius={0.05} position={[0, 0.27, 0.01]} material={M.cap} />
-                <mesh position={[0, 0.235, -0.15]} material={M.cap}>
-                  <boxGeometry args={[0.18, 0.02, 0.12]} />
-                </mesh>
-              </>
-            )}
-            {look.hair === 'short' && <RoundedBox args={[0.23, 0.09, 0.26]} radius={0.04} position={[0, 0.27, 0.01]} material={M.hair} />}
-            {look.hair === 'buzz' && <RoundedBox args={[0.22, 0.05, 0.25]} radius={0.025} position={[0, 0.26, 0.005]} material={M.hair} />}
-            {look.hair === 'bun' && (
-              <>
-                <RoundedBox args={[0.23, 0.09, 0.26]} radius={0.04} position={[0, 0.27, 0.01]} material={M.hair} />
-                <mesh position={[0, 0.33, 0.08]} material={M.hair}>
-                  <sphereGeometry args={[0.06, 10, 8]} />
-                </mesh>
-              </>
-            )}
-            {look.hair === 'long' && (
-              <>
-                <RoundedBox args={[0.24, 0.1, 0.27]} radius={0.05} position={[0, 0.27, 0.01]} material={M.hair} />
-                <RoundedBox args={[0.22, 0.32, 0.06]} radius={0.03} position={[0, 0.08, 0.12]} material={M.hair} />
-              </>
-            )}
-          </group>
-          {/* left hand on the bar */}
-          <Limb pos={[-0.21, 0.54, 0]} rot={[1.05, 0, 0.18]} len={0.3} r={0.055} material={M.outfit}>
-            <Limb rot={[-0.2, 0, -0.1]} len={0.3} r={0.048} material={M.outfit}>
-              <mesh material={M.skin}>
-                <sphereGeometry args={[0.045, 8, 6]} />
-              </mesh>
-            </Limb>
-          </Limb>
-          {/* right hand holding the phone up to the face */}
-          <group ref={armPhone} position={[0.21, 0.54, 0]}>
-            <Limb rot={[0.55, 0, -0.25]} len={0.29} r={0.055} material={M.outfit}>
-              <Limb rot={[1.75, 0, 0.35]} len={0.27} r={0.048} material={M.outfit}>
-                <mesh material={M.skin}>
-                  <sphereGeometry args={[0.045, 8, 6]} />
-                </mesh>
-                <mesh position={[0, -0.04, -0.03]} rotation={[0.5, 0, 0]} material={M.black}>
-                  <boxGeometry args={[0.08, 0.15, 0.012]} />
-                </mesh>
-                <mesh position={[0, -0.04, -0.023]} rotation={[0.5, 0, 0]} material={M.phone}>
-                  <boxGeometry args={[0.07, 0.135, 0.004]} />
-                </mesh>
-              </Limb>
-            </Limb>
-          </group>
-        </group>
-      </group>
+      {/* ------------------------------------------------ rider (rigged person, added on load) */}
+      <group ref={person} position={[0, 0.2, 0.05]} />
     </group>
   );
 }
@@ -276,6 +176,12 @@ export default function Riders() {
       const root = sl.root.current;
       root.visible = true;
       const D = debris.current.get(rd.id);
+      const P = sl.rig && sl.rig.current;
+      if (P) {
+        if (rd.state === 'down') P.play('Death01', { loop: false, timeScale: 1.4, fade: 0.05 });
+        else P.play('Pistol_Aim_Down', { fade: 0.1 });
+        P.mixer.update(dt);
+      }
       if (rd.state === 'down' && D) {
         D.t += dt;
         root.position.set(0, 0, 0);
@@ -320,7 +226,6 @@ export default function Riders() {
       sl.scooter.current.rotation.set(0, 0, THREE.MathUtils.clamp(-lean * 0.05, -0.25, 0.25));
       sl.ring.current.visible = true;
       sl.ring.current.material.opacity = 0.25 + Math.sin(t * 8 + rd.id) * 0.1;
-      sl.armPhone.current.rotation.x = Math.sin(t * 2 + rd.id) * 0.05;
     }
     for (; i < POOL; i++) if (slots[i] && slots[i].root.current) slots[i].root.current.visible = false;
   }, -20);

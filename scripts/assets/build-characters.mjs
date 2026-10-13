@@ -31,6 +31,7 @@ const KEEP_ANIMS = [
   'Dance_Loop',
   'Walk_Loop',
   'Crouch_Idle_Loop',
+  'Pistol_Aim_Down',
 ];
 
 async function write(doc, name) {
