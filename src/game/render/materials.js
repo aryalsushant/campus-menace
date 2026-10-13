@@ -92,7 +92,8 @@ export function withDetail(material, kind, extra) {
       .replace('#include <common>', '#include <common>\n' + DETAIL_COMMON)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + DETAIL[kind] + (extra || ''));
   };
-  material.customProgramCacheKey = () => `detail-${kind}-${prev ? 'p' : ''}`;
+  const prevDetailKey = material.customProgramCacheKey ? material.customProgramCacheKey.bind(material) : () => '';
+  material.customProgramCacheKey = () => `${prevDetailKey()}|detail-${kind}`;
   return material;
 }
 
@@ -113,7 +114,9 @@ export function withRim(material, color = '#ffe6c8', strength = 0.55, power = 2.
         totalEmissiveRadiance += uRimColor * rim * uRimStrength;`
       );
   };
-  material.customProgramCacheKey = () => `rim-${color}-${strength}-${power}`;
+  // colour and strength are uniforms: one program per exponent is enough
+  const prevKey = material.customProgramCacheKey ? material.customProgramCacheKey.bind(material) : () => '';
+  material.customProgramCacheKey = () => `${prevKey()}|rim-${power}`;
   return material;
 }
 
@@ -280,7 +283,8 @@ export function pbr(key, { scale = 1, normal = 1, rough = 1, flat = true, vertex
         }`
       );
   };
-  m.customProgramCacheKey = () => `pbr-${id}`;
+  // textures and scales are uniforms, so every triplanar material shares a program
+  m.customProgramCacheKey = () => `pbr-${vertexColors ? 'vc' : 'n'}-${extraVertex ? 'x' : ''}`;
   pbrCache.set(id, m);
   return m;
 }

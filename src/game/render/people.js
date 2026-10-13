@@ -125,8 +125,8 @@ function paint(mesh, outfit, toCharacter) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;\nfloat fh(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 0.94 + 0.08 * fh(floor(vObjPos * 260.0));');
   };
+  mat.customProgramCacheKey = () => 'person';
   withRim(mat, outfit.rim || '#ffe6c8', outfit.rimStrength ?? 0.4);
-  mat.customProgramCacheKey = () => `person-${outfit.rim || 'd'}-${outfit.rimStrength ?? 0.4}`;
   mesh.material = mat;
 }
 
@@ -160,7 +160,10 @@ export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hair
   body.traverse(o => {
     if (o.isBone) bones[o.name] = o;
     if (o.isSkinnedMesh) {
-      o.frustumCulled = false;
+      // bind-pose bounds padded so animated limbs never pop out of view
+      o.geometry.computeBoundingSphere();
+      o.geometry.boundingSphere.radius *= 1.6;
+      o.frustumCulled = true;
       o.castShadow = castShadow;
       o.receiveShadow = false;
       if (/Superhero|Sphere/.test(o.name) || o.geometry.attributes.position.count > 4000) mainMesh = o;
