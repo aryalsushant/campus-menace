@@ -7,6 +7,7 @@ import { emit } from '../core/bus';
 import { useGame } from '../core/store';
 import { withRim, pbr } from './materials';
 import { mergeStatic } from './geo';
+import { useOriginShift } from './origin';
 import { loadPeople, makePerson, randomLook } from './people';
 import { canAssets, pizzaGeometry } from './props';
 
@@ -710,7 +711,7 @@ const Vending = memo(function Vending({ v }) {
   const m = mats();
   const panelMat = useMemo(() => glow('#3dffb0', 1.4), []);
   const logoMat = useMemo(() => glow('#ffffff', 1.6), []);
-  useEffect(() => {
+  const place = () => {
     if (!ref.current) return;
     const w = {};
     const d = v.side * (v.w + 1.7);
@@ -718,7 +719,9 @@ const Vending = memo(function Vending({ v }) {
     ref.current.position.set(w.x, w.y, w.z);
     // face the path
     ref.current.rotation.y = -h + (v.side > 0 ? Math.PI / 2 : -Math.PI / 2);
-  }, [v]);
+  };
+  useEffect(place, [v]); // eslint-disable-line react-hooks/exhaustive-deps
+  useOriginShift(place);
   useFrame(state => {
     const t = state.clock.elapsedTime;
     const used = v.used;

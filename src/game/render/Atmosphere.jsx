@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { runtime, runnerLerp, toWorld } from '../core/runtime';
 import { timeOfDayAt } from '../sim/tune';
 import { shared } from './materials';
+import { useOriginShift } from './origin';
 
 // Three keyframes: morning → sunset → night. Everything (sky, fog, lights,
 // clouds, window glow) is blended from the same timeline.
@@ -169,10 +170,11 @@ function CloudSea() {
       new THREE.ShaderMaterial({
         vertexShader: /* glsl */ `
           varying vec3 vWorld;
+          uniform vec3 uOrigin;
           #include <fog_pars_vertex>
           void main() {
             vec4 wp = modelMatrix * vec4(position, 1.0);
-            vWorld = wp.xyz;
+            vWorld = wp.xyz + uOrigin;
             vec4 mvPosition = viewMatrix * wp;
             gl_Position = projectionMatrix * mvPosition;
             #include <fog_vertex>
@@ -180,10 +182,13 @@ function CloudSea() {
         `,
         fragmentShader: cloudFrag,
         fog: true,
-        uniforms: THREE.UniformsUtils.merge([
-          THREE.UniformsLib.fog,
-          { uTime: { value: 0 }, uTop: { value: new THREE.Color() }, uShadow: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() } },
-        ]),
+        uniforms: {
+          ...THREE.UniformsUtils.merge([
+            THREE.UniformsLib.fog,
+            { uTime: { value: 0 }, uTop: { value: new THREE.Color() }, uShadow: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() } },
+          ]),
+          uOrigin: shared.uOrigin,
+        },
       }),
     []
   );
@@ -218,6 +223,8 @@ function Lights({ shadows, shadowSize }) {
   const q = useMemo(() => ({}), []);
   const wpos = useMemo(() => ({}), []);
   const frame = useRef(0);
+  const shifted = useRef(false);
+  useOriginShift(() => (shifted.current = true));
   useFrame(() => {
     const L = sun.current;
     if (!L || !runtime.world) return;
@@ -225,7 +232,9 @@ function Lights({ shadows, shadowSize }) {
     frame.current++;
     if (L.shadow) {
       L.shadow.autoUpdate = shadowSize >= 2048;
-      if (!L.shadow.autoUpdate) L.shadow.needsUpdate = frame.current % 2 === 0;
+      // always redraw right after the scene re-centres
+      if (!L.shadow.autoUpdate) L.shadow.needsUpdate = frame.current % 2 === 0 || shifted.current;
+      shifted.current = false;
     }
     runnerLerp(q);
     toWorld(q.s + 10, 0, q.y, wpos);
@@ -379,6 +388,7 @@ export default function Atmosphere({ shadows = true, shadowSize = 2048 }) {
   const q = useMemo(() => ({}), []);
   useFrame((_, dt) => {
     shared.uTime.value += dt;
+    shared.uOrigin.value.set(runtime.origin.x, 0, runtime.origin.z);
     if (!runtime.world) return;
     runnerLerp(q);
     // attract mode lingers on golden hour

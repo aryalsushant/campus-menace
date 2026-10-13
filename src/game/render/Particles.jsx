@@ -98,6 +98,12 @@ export default function Particles() {
       on('canHit', e => burst('fizz', e.s, e.d, e.y)),
       on('canMiss', e => burst('fizz', e.s, e.d, e.y + 0.1, 0.35)),
       on('pizza', e => burst('pizza', e.s, e.d, e.y)),
+      on('originShift', ({ dx, dz }) => {
+        for (const p of pool.current) {
+          p.x -= dx;
+          p.z -= dz;
+        }
+      }),
       on('comboBonus', () => burst('confetti', R().s + 2, R().d, R().y + 1.5)),
       on('takedown', e => burst('confetti', e.s, e.d, R().y + 1.2, 0.5)),
       on('restock', () => burst('restock', R().s, R().d, R().y + 1)),

@@ -7,6 +7,7 @@ import { on } from '../core/bus';
 import { withRim } from './materials';
 import { mergeStatic } from './geo';
 import { loadPeople, makePerson, randomLook, attach, bindPosition } from './people';
+import { shiftVec } from './origin';
 
 // Scooter riders. A fixed pool of models is assigned to live riders each
 // frame. Takedowns turn the rider and the scooter into tumbling debris.
@@ -157,6 +158,12 @@ export default function Riders() {
         });
       }),
       on('worldReset', () => debris.current.clear()),
+      on('originShift', e => {
+        for (const D of debris.current.values()) {
+          shiftVec(D.person.p, e);
+          shiftVec(D.scooter.p, e);
+        }
+      }),
     ];
     return () => offs.forEach(f => f());
   }, []);

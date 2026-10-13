@@ -10,6 +10,7 @@ import { runtime } from '../core/runtime';
 import { on } from '../core/bus';
 import { SKY } from './Atmosphere';
 import { shared } from './materials';
+import { useOriginShift, shiftVec } from './origin';
 
 // A living sky: soft cumulus clouds, airliners with contrails, a banner
 // plane, V-formations of geese, hot-air balloons, shooting stars at night.
@@ -120,6 +121,7 @@ function Airliner() {
   const trail = useRef();
   const blink = useRef();
   const st = useRef({ t: 30, dur: 40, from: new THREE.Vector3(), dir: new THREE.Vector3(), active: false });
+  useOriginShift(e => shiftVec(st.current.from, e));
   const mats = useMemo(
     () => ({
       body: new THREE.MeshStandardMaterial({ color: '#f2f4f7', roughness: 0.4, metalness: 0.3 }),
@@ -205,6 +207,7 @@ function BannerPlane() {
   const group = useRef();
   const banner = useRef();
   const st = useRef({ t: 8, active: false, from: new THREE.Vector3(), dir: new THREE.Vector3(), i: 0 });
+  useOriginShift(e => shiftVec(st.current.from, e));
   const textures = useMemo(() => BANNERS.map(bannerTexture), []);
   const mats = useMemo(
     () => ({
@@ -287,6 +290,7 @@ function Flocks({ birds = 42 }) {
     return { geo: g, mat: m };
   }, []);
   const st = useRef({ t: 12, active: false, from: new THREE.Vector3(), dir: new THREE.Vector3(), n: 9 });
+  useOriginShift(e => shiftVec(st.current.from, e));
   const tmp = useMemo(() => new THREE.Object3D(), []);
   useFrame(({ camera }, dt) => {
     const S = st.current;
@@ -378,6 +382,7 @@ function Balloons() {
 function ShootingStars() {
   const ref = useRef();
   const st = useRef({ t: 0, active: false, from: new THREE.Vector3(), dir: new THREE.Vector3() });
+  useOriginShift(e => shiftVec(st.current.from, e));
   const mat = useMemo(() => new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff').multiplyScalar(3), transparent: true, depthWrite: false, fog: false, toneMapped: false }), []);
   useFrame(({ camera }, dt) => {
     const S = st.current;
@@ -421,6 +426,7 @@ function Fireworks() {
     const P = Array.from({ length: COUNT }, () => ({ life: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), c: new THREE.Color() }));
     return { geo, mat, P };
   }, []);
+  useOriginShift(e => P.forEach(p => shiftVec(p.p, e)));
   useEffect(
     () =>
       on('passedBest', () => {

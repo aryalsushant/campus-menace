@@ -7,6 +7,7 @@ import { runtime, runnerLerp, toWorld } from '../core/runtime';
 import { shared } from './materials';
 import { sectionHeight } from './campus';
 import { SKY } from './Atmosphere';
+import { useOriginShift, shiftVec } from './origin';
 
 // Grass blades on the lawns, drifting autumn leaves and night fireflies.
 // Everything is recycled around the player, so the cost is constant.
@@ -56,6 +57,8 @@ export function Grass({ count }) {
     const rnd = Math.random;
     return Array.from({ length: count }, () => ({ u: rnd(), side: rnd() < 0.5 ? -1 : 1, off: rnd(), rot: rnd() * Math.PI, sc: 0.7 + rnd() * 0.7, base: -1, shade: rnd() }));
   }, [count]);
+  // re-place every blade after the scene re-centres
+  useOriginShift(() => blades.forEach(b => (b.base = NaN)));
   const tmp = useMemo(() => new THREE.Object3D(), []);
   const col = useMemo(() => new THREE.Color(), []);
   const q = useMemo(() => ({}), []);
@@ -120,6 +123,7 @@ export function Leaves({ count = 90 }) {
     () => Array.from({ length: count }, () => ({ p: new THREE.Vector3(0, -999, 0), v: new THREE.Vector3(), spin: new THREE.Vector3(Math.random() * 4, Math.random() * 4, Math.random() * 4), r: new THREE.Euler(), age: 99 })),
     [count]
   );
+  useOriginShift(e => leaves.forEach(L => shiftVec(L.p, e)));
   const tmp = useMemo(() => new THREE.Object3D(), []);
   const palette = useMemo(() => ['#e3842f', '#d2552c', '#e8b63a', '#c9472f', '#f0a23b', '#9a6a2a'].map(c => new THREE.Color(c)), []);
   useFrame(({ camera }, rawDt) => {
@@ -188,6 +192,7 @@ export function Fireflies({ count = 120 }) {
     []
   );
   const seeded = useRef(-1);
+  useOriginShift(() => (seeded.current = -1));
   const q = useMemo(() => ({}), []);
   const w = useMemo(() => ({}), []);
   useFrame(() => {
