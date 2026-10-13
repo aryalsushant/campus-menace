@@ -6,6 +6,7 @@ import { runtime } from '../core/runtime';
 import { buildSection, buildCrossing } from './campus';
 import { materials, pbr, texSet } from './materials';
 import { foliageMaterial, foliageDepthMaterial } from './foliage';
+import { windowMaterial } from './windows';
 
 // Which material each kit layer renders with.
 let MATS = null;
@@ -34,11 +35,14 @@ function kitMaterials() {
     water: m.water,
     spray: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     cards: foliageMaterial(),
+    wincards: windowMaterial(),
   };
   return MATS;
 }
 
-const NO_SHADOW = new Set(['glow', 'windows', 'water', 'spray', 'path', 'grass', 'earth', 'concrete']);
+// Only things near the path cast real-time shadows: buildings sit 20+ m away
+// and would otherwise be drawn whole into the shadow map every frame.
+const NO_SHADOW = new Set(['glow', 'windows', 'water', 'spray', 'path', 'grass', 'earth', 'concrete', 'brick', 'plaster', 'stone', 'slate', 'marble', 'bronze', 'wincards']);
 const NO_RECEIVE = new Set(['glow', 'windows', 'spray']);
 
 function Layers({ g }) {

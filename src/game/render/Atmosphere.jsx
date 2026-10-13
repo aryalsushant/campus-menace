@@ -217,9 +217,16 @@ function Lights({ shadows, shadowSize }) {
   }, [scene, target]);
   const q = useMemo(() => ({}), []);
   const wpos = useMemo(() => ({}), []);
+  const frame = useRef(0);
   useFrame(() => {
     const L = sun.current;
     if (!L || !runtime.world) return;
+    // phones refresh the shadow map every other frame (the sun moves with you, so it isn't noticeable)
+    frame.current++;
+    if (L.shadow) {
+      L.shadow.autoUpdate = shadowSize >= 2048;
+      if (!L.shadow.autoUpdate) L.shadow.needsUpdate = frame.current % 2 === 0;
+    }
     runnerLerp(q);
     toWorld(q.s + 10, 0, q.y, wpos);
     const snap = 0.5;
@@ -250,8 +257,8 @@ function Lights({ shadows, shadowSize }) {
         shadow-camera-near={1}
         shadow-camera-far={200}
         shadow-intensity={0.38}
-        shadow-radius={5}
-        shadow-blurSamples={12}
+        shadow-radius={4}
+        shadow-blurSamples={8}
         shadow-bias={-0.0004}
         shadow-normalBias={0.05}
       />
