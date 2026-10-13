@@ -1,9 +1,9 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGame } from '../core/store';
 import { runtime } from '../core/runtime';
-import { buildSection, buildCrossing } from './campus';
+import { requestChunk, releaseChunks } from './chunks';
 import { materials, pbr, texSet } from './materials';
 import { foliageMaterial, foliageDepthMaterial } from './foliage';
 import { windowMaterial } from './windows';
@@ -62,9 +62,7 @@ function Layers({ g }) {
   });
 }
 
-const Section = memo(function Section({ seg }) {
-  const g = useMemo(() => buildSection(seg, runtime.world.track), [seg]);
-  useEffect(() => () => Object.values(g).forEach(x => x && x.dispose && x.dispose()), [g]);
+const Section = memo(function Section({ g }) {
   return (
     <group>
       <Layers g={g} />
@@ -98,15 +96,7 @@ function CollapsePlank({ geo, center, padId }) {
   return <mesh ref={ref} geometry={geo} material={kitMaterials().planks} castShadow receiveShadow />;
 }
 
-const Crossing = memo(function Crossing({ seg, prev }) {
-  const g = useMemo(() => buildCrossing(seg, runtime.world, prev), [seg, prev]);
-  useEffect(
-    () => () => {
-      for (const v of Object.values(g)) if (v && v.dispose) v.dispose();
-      g.collapse.forEach(c => c.geo.dispose());
-    },
-    [g]
-  );
+const Crossing = memo(function Crossing({ g }) {
   const { collapse, ...layers } = g;
   return (
     <group>
@@ -118,8 +108,21 @@ const Crossing = memo(function Crossing({ seg, prev }) {
   );
 });
 
+// Chunk geometry comes from the background builder; a chunk appears as soon
+// as it is ready (normally long before it is in view).
 export default function Segments() {
   useGame(s => s.segVersion);
-  const segs = runtime.world ? runtime.world.segments : [];
-  return segs.map((seg, i) => (seg.kind === 'section' ? <Section key={seg.id} seg={seg} /> : <Crossing key={seg.id} seg={seg} prev={segs[i - 1]} />));
+  useGame(s => s.chunkVersion);
+  const world = runtime.world;
+  useEffect(() => {
+    releaseChunks([runtime.world, runtime.nextWorld]);
+  });
+  if (!world) return null;
+  const segs = world.segments;
+  return segs.map((seg, i) => {
+    const g = requestChunk(world, seg, segs[i - 1]);
+    if (!g) return null;
+    const key = `${world.seed}:${seg.id}`;
+    return seg.kind === 'section' ? <Section key={key} g={g} /> : <Crossing key={key} g={g} />;
+  });
 }
