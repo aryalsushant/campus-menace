@@ -671,18 +671,44 @@ export function buildCrossing(seg, world, prevSeg) {
     }
   }
 
-  // hazard markers at both edges of any open drop
-  const markEdge = (s, y, w, dir) => {
-    alongFrame(track, s - dir * 0.3, 0, y + 0.03, M);
-    for (let k = -w; k < w; k += 0.7) {
-      const m = M.clone().multiply(new THREE.Matrix4().makeTranslation(k + 0.35, 0, 0));
-      props.addMatrix(new THREE.BoxGeometry(0.62, 0.04, 0.5), m, Math.round(k / 0.7) % 2 ? '#1d1d1d' : '#f2c21b', 0);
+  // hazard markers: a wide striped band at the edge, tall posts, and an
+  // overhead gantry before it so the jump reads from far away
+  const markEdge = (s, y, w, dir, gantry = true) => {
+    const band = 1.8;
+    alongFrame(track, s - dir * (band / 2 + 0.05), 0, y + 0.05, M);
+    const stripe = 0.9;
+    for (let k = -w; k < w - 0.01; k += stripe) {
+      const width = Math.min(stripe, w - k);
+      const m = M.clone().multiply(new THREE.Matrix4().makeTranslation(k + width / 2, 0, 0)).multiply(new THREE.Matrix4().makeRotationY(0.5));
+      props.addMatrix(new THREE.BoxGeometry(width * 0.62, 0.06, band * 1.15), m, Math.round((k + w) / stripe) % 2 ? '#1d1d1d' : '#ffd21f', 0);
     }
+    alongFrame(track, s - dir * (band / 2 + 0.05), 0, y + 0.02, M);
+    props.addMatrix(new THREE.BoxGeometry(w * 2, 0.04, band), M, '#1d1d1d', 0);
     for (const side of [-1, 1]) {
-      alongFrame(track, s - dir * 0.4, side * (w + 0.9), y, M);
-      props.addMatrix(new THREE.BoxGeometry(0.12, 1.1, 0.12), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.55, 0)), '#f2c21b', 0);
-      glow.addMatrix(new THREE.SphereGeometry(0.12, 6, 4), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 1.18, 0)), '#ff6a2a', 0);
+      alongFrame(track, s - dir * 0.4, side * (w + 0.6), y, M);
+      props.addMatrix(new THREE.BoxGeometry(0.22, 1.7, 0.22), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.85, 0)), '#ffd21f', 0);
+      for (let k = 0; k < 3; k++) props.addMatrix(new THREE.BoxGeometry(0.24, 0.16, 0.24), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.3 + k * 0.5, 0)), '#1d1d1d', 0);
+      glow.addMatrix(new THREE.SphereGeometry(0.2, 8, 6), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 1.85, 0)), '#ffaa1a', 0);
     }
+    if (!gantry) return;
+    // overhead warning board a few metres before the edge
+    const gs = s - dir * 9;
+    alongFrame(track, gs, 0, y, M);
+    const span = w + 0.7;
+    for (const side of [-1, 1]) {
+      props.addMatrix(new THREE.BoxGeometry(0.24, 7.4, 0.24), M.clone().multiply(new THREE.Matrix4().makeTranslation(side * span, 3.7, 0)), '#2a2a2a', 0);
+    }
+    props.addMatrix(new THREE.BoxGeometry(span * 2 + 0.3, 1.2, 0.16), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 6.9, 0)), '#ffd21f', 0);
+    // chevrons pointing up: jump!
+    const n = Math.max(3, Math.round(span / 1.1));
+    for (let k = 0; k < n; k++) {
+      const x = -span + 0.7 + (k * (span * 2 - 1.4)) / Math.max(1, n - 1);
+      for (const sgn of [-1, 1]) {
+        const m = M.clone().multiply(new THREE.Matrix4().makeTranslation(x + sgn * 0.17, 6.92, 0.09)).multiply(new THREE.Matrix4().makeRotationZ(sgn * 0.75));
+        props.addMatrix(new THREE.BoxGeometry(0.14, 0.62, 0.04), m, '#1d1d1d', 0);
+      }
+    }
+    for (const side of [-1, 1]) glow.addMatrix(new THREE.SphereGeometry(0.24, 8, 6), M.clone().multiply(new THREE.Matrix4().makeTranslation(side * span, 7.65, 0)), '#ff8a1a', 0);
   };
 
   const plankRun = (p, style) => {
@@ -747,14 +773,13 @@ export function buildCrossing(seg, world, prevSeg) {
       }
       if (seg.type === 'broken') {
         for (const h of seg.holes) {
-          markEdge(h.s0, y0, hw, 1);
+          markEdge(h.s0, y0, hw, 1, false);
           // dangling plank
           alongFrame(track, h.s0 + 0.3, rnd.range(-hw * 0.5, hw * 0.5), y0 - 0.7, M);
           M.multiply(new THREE.Matrix4().makeRotationX(1.1));
           props.addMatrix(new THREE.BoxGeometry(hw * 1.2, 0.14, 0.8), M, '#8a5a32', 0.05);
         }
       }
-      if (seg.type === 'narrow') markEdge(seg.s0, y0, hw, 1);
       break;
     }
     case 'collapse': {
@@ -776,7 +801,7 @@ export function buildCrossing(seg, world, prevSeg) {
         b.addMatrix(new THREE.BoxGeometry(seg.w * 1.4, 0.02, 0.06), local.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.09, 0)).multiply(new THREE.Matrix4().makeRotationY(0.4)), '#3a2a1a', 0);
         collapse.push({ padId: p.id, geo: b.build(), center });
       }
-      markEdge(seg.s0, y0, seg.w, 1);
+      markEdge(seg.s0, y0, seg.w, 1, false);
       break;
     }
     case 'stones': {

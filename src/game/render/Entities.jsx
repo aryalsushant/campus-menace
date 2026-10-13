@@ -70,20 +70,33 @@ function ObstacleModel({ o }) {
   const m = mats();
   const w2 = o.hw * 2;
   switch (o.model) {
-    case 'wetfloor':
+    case 'wetfloor': {
+      // a row of signs joined by caution tape, covering the whole hitbox
+      const n = Math.max(2, Math.round(w2 / 0.75));
+      const xs = Array.from({ length: n }, (_, i) => -w2 / 2 + 0.3 + (i * (w2 - 0.6)) / Math.max(1, n - 1));
       return (
         <group>
-          <mesh position={[0, 0.38, 0.1]} rotation={[-0.25, 0, 0]} material={m.yellow} castShadow>
-            <boxGeometry args={[0.55, 0.78, 0.03]} />
-          </mesh>
-          <mesh position={[0, 0.38, -0.1]} rotation={[0.25, 0, 0]} material={m.yellow} castShadow>
-            <boxGeometry args={[0.55, 0.78, 0.03]} />
-          </mesh>
-          <mesh position={[0, 0.45, -0.18]} rotation={[0.25, 0, 0]} material={m.black}>
-            <boxGeometry args={[0.2, 0.2, 0.01]} />
-          </mesh>
+          {xs.map(x => (
+            <group key={x} position={[x, 0, 0]}>
+              <mesh position={[0, 0.46, 0.11]} rotation={[-0.24, 0, 0]} material={m.yellow} castShadow>
+                <boxGeometry args={[0.62, 0.95, 0.04]} />
+              </mesh>
+              <mesh position={[0, 0.46, -0.11]} rotation={[0.24, 0, 0]} material={m.yellow} castShadow>
+                <boxGeometry args={[0.62, 0.95, 0.04]} />
+              </mesh>
+              <mesh position={[0, 0.55, -0.22]} rotation={[0.24, 0, 0]} material={m.black}>
+                <boxGeometry args={[0.26, 0.26, 0.01]} />
+              </mesh>
+            </group>
+          ))}
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <mesh key={i} position={[-w2 / 2 + ((i + 0.5) * w2) / 6, 0.7, 0]} material={i % 2 ? m.black : m.yellow}>
+              <boxGeometry args={[w2 / 6, 0.09, 0.02]} />
+            </mesh>
+          ))}
         </group>
       );
+    }
     case 'backpacks':
       return (
         <group>
@@ -100,8 +113,11 @@ function ObstacleModel({ o }) {
     case 'skateboard':
       return (
         <group>
-          <RoundedBox args={[0.3, 0.05, 0.85]} radius={0.02} position={[0, 0.12, 0]} rotation={[0, 0.6, 0]} material={m.red} castShadow />
-          <RoundedBox args={[0.5, 0.55, 0.4]} radius={0.12} position={[0.4, 0.3, 0.2]} material={m.blue} castShadow />
+          <RoundedBox args={[0.3, 0.06, 0.85]} radius={0.02} position={[-w2 * 0.25, 0.14, 0]} rotation={[0, 0.6, 0]} material={m.red} castShadow />
+          <RoundedBox args={[Math.max(0.5, w2 * 0.45), 0.6, 0.42]} radius={0.12} position={[w2 * 0.2, 0.32, 0.1]} material={m.blue} castShadow />
+          <mesh position={[0, 0.7, 0]} material={m.yellow}>
+            <boxGeometry args={[w2, 0.08, 0.02]} />
+          </mesh>
         </group>
       );
     case 'cone':
