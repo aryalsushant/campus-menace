@@ -249,7 +249,9 @@ function Lights({ shadows, shadowSize }) {
         shadow-camera-bottom={-34}
         shadow-camera-near={1}
         shadow-camera-far={200}
-        shadow-intensity={0.35}
+        shadow-intensity={0.38}
+        shadow-radius={5}
+        shadow-blurSamples={12}
         shadow-bias={-0.0004}
         shadow-normalBias={0.05}
       />
@@ -281,6 +283,83 @@ function FillLight() {
   return <directionalLight ref={ref} />;
 }
 
+// Image-based lighting from our own sky, refreshed as the time of day moves,
+// so metal (scooters, cans) and glossy surfaces reflect the sunset.
+function SkyEnvironment() {
+  const { gl, scene } = useThree();
+  const state = useMemo(() => {
+    const envScene = new THREE.Scene();
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: skyVert,
+      fragmentShader: skyFrag,
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uZenith: { value: SKY.zenith },
+        uMid: { value: SKY.mid },
+        uHorizon: { value: SKY.horizon },
+        uSun: { value: SKY.sun },
+        uSunDir: { value: SKY.sunDir },
+        uTime: { value: 0 },
+        uStars: { value: 0 },
+        uNight: { value: 0 },
+      },
+    });
+    envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), mat));
+    // a warm ground bounce under the horizon
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 24), new THREE.MeshBasicMaterial({ color: '#5a6a3a' }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -2;
+    envScene.add(ground);
+    return { envScene, mat, pmrem: new THREE.PMREMGenerator(gl), lastTod: -1, rt: null, ground };
+  }, [gl]);
+  useEffect(
+    () => () => {
+      state.pmrem.dispose();
+      if (state.rt) state.rt.dispose();
+      scene.environment = null;
+    },
+    [state, scene]
+  );
+  useFrame(() => {
+    if (Math.abs(SKY.tod - state.lastTod) < 0.04) return;
+    state.lastTod = SKY.tod;
+    state.mat.uniforms.uNight.value = SKY.night;
+    state.ground.material.color.copy(SKY.hemiGround).multiplyScalar(1.2);
+    const rt = state.pmrem.fromScene(state.envScene, 0.02);
+    if (state.rt) state.rt.dispose();
+    state.rt = rt;
+    scene.environment = rt.texture;
+    scene.environmentIntensity = 0.55 - SKY.night * 0.25;
+  });
+  return null;
+}
+
+// a bright disc where the sun is: the source for the light-ray effect
+export const sunRef = { current: null };
+function Sun() {
+  const ref = useRef();
+  useFrame(({ camera }) => {
+    const m = ref.current;
+    if (!m) return;
+    m.position.copy(camera.position).addScaledVector(SKY.sunDir, 420);
+    m.material.color.copy(SKY.sun).multiplyScalar(5 - SKY.night * 3.5);
+    m.visible = SKY.sunDir.y > -0.05;
+  });
+  return (
+    <mesh
+      ref={el => {
+        ref.current = el;
+        sunRef.current = el;
+      }}
+      frustumCulled={false}
+    >
+      <sphereGeometry args={[11, 24, 12]} />
+      <meshBasicMaterial color="#fff2cf" fog={false} toneMapped={false} />
+    </mesh>
+  );
+}
+
 export default function Atmosphere({ shadows = true, shadowSize = 2048 }) {
   const { scene } = useThree();
   const fog = useMemo(() => new THREE.Fog('#ffffff', 50, 300), []);
@@ -307,6 +386,8 @@ export default function Atmosphere({ shadows = true, shadowSize = 2048 }) {
   return (
     <>
       <SkyDome />
+      <SkyEnvironment />
+      <Sun />
       <CloudSea />
       <Lights shadows={shadows} shadowSize={shadowSize} />
     </>

@@ -62,6 +62,8 @@ export default function CameraRig() {
       toWorld(q.s, q.d, q.y, b);
     }
     tmp.set(a.x, a.y, a.z);
+    // big jumps (new run, fast-forward): cut instead of swooping across the map
+    if (S.init && S.pos.distanceTo(tmp) > 40) S.init = false;
     if (!S.init) {
       S.pos.copy(tmp);
       S.look.set(b.x, b.y, b.z);

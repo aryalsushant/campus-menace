@@ -14,6 +14,7 @@ import { Obstacles, VendingMachines, Pickups, Cans, AimLine } from './render/Ent
 import Particles from './render/Particles';
 import CameraRig from './render/CameraRig';
 import Effects from './render/Effects';
+import { Grass, Leaves, Fireflies } from './render/Nature';
 
 function Driver() {
   useFrame((_, dt) => tick(dt), -50);
@@ -33,7 +34,7 @@ export default function Game() {
     <Canvas
       className="cm-canvas"
       dpr={T.dpr}
-      shadows={T.shadows}
+      shadows={T.shadows ? 'variance' : false}
       camera={{ fov: 62, near: 0.1, far: 900, position: [0, 4, 8] }}
       gl={{ antialias: tier === 'low', powerPreference: 'high-performance', stencil: false }}
       onCreated={({ gl }) => {
@@ -58,6 +59,9 @@ export default function Game() {
       <Riders />
       <Student />
       <Particles />
+      {tier !== 'low' && <Grass key={tier} count={tier === 'high' ? 14000 : 6000} />}
+      <Leaves count={tier === 'low' ? 40 : 90} />
+      <Fireflies />
       <CameraRig />
       <Effects tier={tier} />
     </Canvas>
