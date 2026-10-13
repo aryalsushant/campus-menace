@@ -284,6 +284,9 @@ export function buildSection(seg, track) {
   const canopy = new Builder(rnd.next);
   const glow = new Builder(rnd.next);
   const windows = new Builder(rnd.next);
+  const brick = new Builder(rnd.next);
+  const roof = new Builder(rnd.next);
+  const leaf = new Builder(rnd.next);
   const M = new THREE.Matrix4();
   for (const part of seg.parts) {
     if (!part.ramp) continue;
@@ -318,7 +321,7 @@ export function buildSection(seg, track) {
         // clipped hedge, slightly irregular
         const hh = 0.82 + pseudo(sm * 0.7 + side) * 0.12;
         alongFrame(track, sm, side * (w + 0.78), ym + hh / 2, M);
-        props.addMatrix(new THREE.BoxGeometry(0.72, hh, len), M, T.hedge, 0.14);
+        leaf.addMatrix(new THREE.BoxGeometry(0.72, hh, len), M, T.hedge, 0.1);
       } else if (seg.stage === 1) {
         // jersey barriers with orange/white bands every few metres
         alongFrame(track, sm, side * (w + 0.7), ym + 0.42, M);
@@ -337,7 +340,7 @@ export function buildSection(seg, track) {
     }
   }
 
-  decorate(seg, track, { rnd, T, H, w, outer, props, metal, canopy, glow, windows });
+  decorate(seg, track, { rnd, T, H, w, outer, props, metal, canopy, glow, windows, brick, roof, leaf });
 
   return {
     path: pathGeo,
@@ -348,6 +351,9 @@ export function buildSection(seg, track) {
     canopy: canopy.build(),
     glow: glow.build(),
     windows: windows.build(),
+    brick: brick.build(),
+    roof: roof.build(),
+    leaf: leaf.build(),
   };
 }
 
@@ -358,7 +364,7 @@ function pseudo(x) {
 
 // --------------------------------------------------------------- decoration
 function decorate(seg, track, ctx) {
-  const { rnd, T, H, w, outer, props, metal, canopy, glow, windows } = ctx;
+  const { rnd, T, H, w, outer, props, metal, canopy, glow, windows, brick, roof } = ctx;
   const M = new THREE.Matrix4();
   const len = seg.s1 - seg.s0;
 
@@ -398,7 +404,7 @@ function decorate(seg, track, ctx) {
         const dOff = w + rnd.range(17, 22) + depth / 2;
         const cs = s + bw / 2;
         frame(track, cs, side * dOff, H(cs) - 0.1, side, M);
-        hall(M, { w: bw, d: depth, floors: rnd.int(2, 4) }, T, { props, windows, metal }, rnd);
+        hall(M, { w: bw, d: depth, floors: rnd.int(2, 4) }, T, { props, windows, metal, brick, roof }, rnd);
         s += bw + rnd.range(6, 14);
       }
     }
@@ -407,7 +413,7 @@ function decorate(seg, track, ctx) {
       const side = rnd.sign();
       const cs = seg.s0 + len * rnd.range(0.3, 0.7);
       frame(track, cs, side * (w + 38), H(cs), side, M);
-      clockTower(M, T, { props, glow, metal }, rnd);
+      clockTower(M, T, { props, glow, metal, brick, roof }, rnd);
     }
     // plaza: planters and a food truck
     if (seg.plaza) {
@@ -448,7 +454,7 @@ function decorate(seg, track, ctx) {
       const side = rnd.sign();
       const cs = seg.s0 + len * rnd.range(0.3, 0.7);
       frame(track, cs, side * (outer + 14), H(cs) - rnd.range(2, 8), side, M);
-      floatingHall(M, T, { props, windows, metal, canopy, glow }, rnd);
+      floatingHall(M, T, { props, windows, metal, canopy, glow, brick, roof }, rnd);
     }
     for (let k = 0; k < 6; k++) {
       const side = rnd.sign();
@@ -507,8 +513,8 @@ function tree(track, s, d, y, T, { props, canopy }, rnd) {
 }
 
 // brick campus hall: front face +z toward the path
-function hall(M, { w, d, floors }, T, { props, windows, metal }, rnd) {
-  const brick = rnd.pick(T.bricks);
+function hall(M, { w, d, floors }, T, { props, windows, metal, brick, roof }, rnd) {
+  const brickC = rnd.pick(T.bricks);
   const trim = '#f1e8d6';
   const fh = 3.3;
   const H = floors * fh + 0.8;
@@ -517,12 +523,12 @@ function hall(M, { w, d, floors }, T, { props, windows, metal }, rnd) {
     b.addMatrix(geo, M.clone().multiply(m), c, jitter);
   };
   add(new THREE.BoxGeometry(w + 0.4, 0.8, d + 0.4), [0, 0.4, 0], '#b9ad98');
-  add(new THREE.BoxGeometry(w, H, d), [0, H / 2 + 0.4, 0], brick, props, 0.08);
+  add(new THREE.BoxGeometry(w, H, d), [0, H / 2 + 0.4, 0], brickC, brick, 0.04);
   for (let f = 1; f <= floors; f++) add(new THREE.BoxGeometry(w + 0.16, 0.18, d + 0.16), [0, 0.4 + f * fh, 0], trim, props, 0.02);
   // roof
   const roofC = rnd.pick(T.roof);
   if (rnd.chance(0.7)) {
-    add(gableGeometry(d + 0.8, rnd.range(2.4, 3.6), w + 0.6), [0, H + 0.4, 0], roofC, props, 0.06, [0, Math.PI / 2, 0]);
+    add(gableGeometry(d + 0.8, rnd.range(2.4, 3.6), w + 0.6), [0, H + 0.4, 0], roofC, roof, 0.04, [0, Math.PI / 2, 0]);
   } else {
     add(new THREE.BoxGeometry(w + 0.3, 0.6, d + 0.3), [0, H + 0.7, 0], trim);
     add(new THREE.SphereGeometry(Math.min(w, d) * 0.28, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), [0, H + 1, 0], '#6f9a8a', metal);
@@ -550,16 +556,15 @@ function hall(M, { w, d, floors }, T, { props, windows, metal }, rnd) {
   }
 }
 
-function clockTower(M, T, { props, glow, metal }, rnd) {
+function clockTower(M, T, { props, glow, metal, brick, roof }, rnd) {
   const add = (geo, pos, c, b = props, rot) => {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
     b.addMatrix(geo, M.clone().multiply(m), c, 0.05);
   };
-  const brick = rnd.pick(T.bricks);
-  add(new THREE.BoxGeometry(5, 18, 5), [0, 9, 0], brick);
+  add(new THREE.BoxGeometry(5, 18, 5), [0, 9, 0], rnd.pick(T.bricks), brick);
   add(new THREE.BoxGeometry(5.6, 0.5, 5.6), [0, 18, 0], '#f1e8d6');
   add(new THREE.BoxGeometry(4.4, 4, 4.4), [0, 20.2, 0], '#f1e8d6');
-  add(new THREE.ConeGeometry(3.6, 6, 4), [0, 25.2, 0], rnd.pick(T.roof), props, [0, Math.PI / 4, 0]);
+  add(new THREE.ConeGeometry(3.6, 6, 4), [0, 25.2, 0], rnd.pick(T.roof), roof, [0, Math.PI / 4, 0]);
   for (const r of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     const m = new THREE.Matrix4().makeRotationY(r).multiply(new THREE.Matrix4().makeTranslation(0, 20.2, 2.22));
     glow.addMatrix(new THREE.CircleGeometry(1.5, 20), M.clone().multiply(m), '#fff2cf', 0);
@@ -609,14 +614,14 @@ function crane(M, { metal, glow }, rnd) {
   add(new THREE.SphereGeometry(0.3, 6, 4), [20, h + 0.6, 0], '#ff3a2a', glow);
 }
 
-function floatingHall(M, T, { props, windows, metal, canopy, glow }, rnd) {
+function floatingHall(M, T, { props, windows, metal, canopy, glow, brick, roof }, rnd) {
   const add = (geo, pos, c, b = props, rot) => {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
     b.addMatrix(geo, M.clone().multiply(m), c, 0.08);
   };
   add(new THREE.CylinderGeometry(9, 2.5, 9, 7), [0, -4.5, 0], T.rock);
   add(new THREE.CylinderGeometry(9.2, 9, 0.5, 7), [0, 0, 0], T.lawn);
-  hall(M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.2, 0)), { w: 10, d: 7, floors: 2 }, T, { props, windows, metal }, rnd);
+  hall(M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.2, 0)), { w: 10, d: 7, floors: 2 }, T, { props, windows, metal, brick, roof }, rnd);
   for (const x of [-6.5, 6.5]) canopy.addMatrix(new THREE.IcosahedronGeometry(1.8, 0), M.clone().multiply(new THREE.Matrix4().makeTranslation(x, 3.4, 2)), rnd.pick(T.trees), 0.2);
   add(new THREE.SphereGeometry(0.3, 6, 4), [0, 9.5, 0], '#ffe2a0', glow);
 }

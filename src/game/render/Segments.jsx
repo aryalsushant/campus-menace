@@ -24,6 +24,9 @@ const Section = memo(function Section({ seg }) {
       <Mesh geo={g.canopy} mat={m.canopy} />
       <Mesh geo={g.glow} mat={m.glow} shadows={false} receive={false} />
       <Mesh geo={g.windows} mat={m.windows} shadows={false} receive={false} />
+      <Mesh geo={g.brick} mat={m.brick} />
+      <Mesh geo={g.roof} mat={m.roof} />
+      <Mesh geo={g.leaf} mat={m.leaf} />
     </group>
   );
 });

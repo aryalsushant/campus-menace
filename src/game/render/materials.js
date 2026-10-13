@@ -37,6 +37,86 @@ function paverTexture() {
   return t;
 }
 
+
+// ---------------------------------------------------------------------------
+// World-space surface detail. Geometry is merged and has no UVs, so patterns
+// (brick courses, shingles, leaves, grain) are computed from world position.
+const DETAIL = {
+  brick: /* glsl */ `
+    vec2 bp = abs(vWN.x) > abs(vWN.z) ? vWP.zy : vWP.xy;
+    bp *= vec2(1.0 / 0.44, 1.0 / 0.17);
+    float row = floor(bp.y);
+    bp.x += mod(row, 2.0) * 0.5;
+    vec2 bf = fract(bp);
+    float mortar = 1.0 - smoothstep(0.0, 0.05, min(min(bf.x, 1.0 - bf.x) * 0.6, min(bf.y, 1.0 - bf.y)));
+    float bn = dHash(floor(bp));
+    float vertical = 1.0 - smoothstep(0.4, 0.7, abs(vWN.y));
+    vec3 brickCol = diffuseColor.rgb * (0.82 + 0.32 * bn) * (0.94 + 0.12 * dNoise(vWP.xy * 3.0 + vWP.zy * 3.0));
+    diffuseColor.rgb = mix(diffuseColor.rgb, mix(brickCol, vec3(0.74, 0.7, 0.64), mortar), vertical);
+  `,
+  roof: /* glsl */ `
+    vec2 rp = vec2(vWP.x + vWP.z, vWP.y) * vec2(1.0 / 0.5, 1.0 / 0.32);
+    rp.x += mod(floor(rp.y), 2.0) * 0.5;
+    vec2 rf = fract(rp);
+    float edge = smoothstep(0.0, 0.12, rf.y) * smoothstep(0.0, 0.06, min(rf.x, 1.0 - rf.x));
+    diffuseColor.rgb *= (0.72 + 0.28 * edge) * (0.9 + 0.2 * dHash(floor(rp)));
+  `,
+  leaf: /* glsl */ `
+    float l1 = dNoise(vWP.xz * 4.0 + vWP.y * 3.0);
+    float l2 = dNoise(vWP.xy * 7.0 + vWP.zx * 5.0);
+    diffuseColor.rgb *= 0.72 + 0.42 * l1 + 0.18 * l2;
+    diffuseColor.rgb += vec3(0.04, 0.07, 0.0) * smoothstep(0.6, 1.0, vWN.y);
+  `,
+  grain: /* glsl */ `
+    diffuseColor.rgb *= 0.93 + 0.12 * dNoise(vWP.xz * 2.5 + vWP.y * 1.7);
+  `,
+};
+
+const DETAIL_COMMON = /* glsl */ `
+  varying vec3 vWP; varying vec3 vWN;
+  float dHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float dNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(dHash(i), dHash(i + vec2(1, 0)), u.x), mix(dHash(i + vec2(0, 1)), dHash(i + vec2(1, 1)), u.x), u.y);
+  }
+`;
+
+export function withDetail(material, kind, extra) {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + DETAIL_COMMON)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + DETAIL[kind] + (extra || ''));
+  };
+  material.customProgramCacheKey = () => `detail-${kind}-${prev ? 'p' : ''}`;
+  return material;
+}
+
+// Rim light: a fresnel glow on the silhouette so characters pop off the
+// background (the "hero" look of stylized action games).
+export function withRim(material, color = '#ffe6c8', strength = 0.55, power = 2.6) {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.uRimColor = { value: new THREE.Color(color) };
+    sh.uniforms.uRimStrength = { value: strength };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRimColor; uniform float uRimStrength;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        float rim = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), ${power.toFixed(2)});
+        totalEmissiveRadiance += uRimColor * rim * uRimStrength;`
+      );
+  };
+  material.customProgramCacheKey = () => `rim-${color}-${strength}-${power}`;
+  return material;
+}
+
 let _mats = null;
 export function materials() {
   if (_mats) return _mats;
@@ -44,7 +124,13 @@ export function materials() {
   const props = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.78, metalness: 0.04 });
   const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.38, metalness: 0.55 });
 
-  const path = new THREE.MeshStandardMaterial({ map: paverTexture(), roughness: 0.86, metalness: 0 });
+  const paver = paverTexture();
+  const path = new THREE.MeshStandardMaterial({ map: paver, bumpMap: paver, bumpScale: 2.2, roughness: 0.82, metalness: 0 });
+  const brick = withDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }), 'brick');
+  const roof = withDetail(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.05 }), 'roof');
+  const leaf = withDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'leaf');
+  withDetail(props, 'grain');
+  withDetail(terrain, 'grain');
 
   // mowed lawn stripes along the path direction (uv.y = s)
   const lawn = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
@@ -77,6 +163,8 @@ export function materials() {
         transformed.z += cos(uTime * 1.1 + ph * 1.3) * 0.07;`
       );
   };
+
+  withDetail(canopy, 'leaf');
 
   // lamps, windows, deck lights: brighter at night
   const glow = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
@@ -119,6 +207,6 @@ export function materials() {
     `,
   });
 
-  _mats = { terrain, props, metal, path, lawn, canopy, glow, windows, water };
+  _mats = { terrain, props, metal, path, lawn, canopy, glow, windows, water, brick, roof, leaf };
   return _mats;
 }
