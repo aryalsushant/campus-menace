@@ -34,6 +34,7 @@ export default function CameraRig() {
 
   useFrame((_, rawDt) => {
     const world = runtime.world;
+    runtime.camera = camera;
     if (!world) return;
     const dt = Math.min(rawDt, 0.05);
     const S = st.current;
