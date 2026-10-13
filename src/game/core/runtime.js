@@ -21,7 +21,30 @@ export const runtime = {
   startedAt: 0,
   runId: null,
   nextWorld: null,
+  // floating origin: the scene is drawn relative to this point so float32
+  // stays precise on long runs (the sim itself keeps absolute coordinates)
+  origin: { x: 0, z: 0 },
 };
+
+// The origin moves in whole multiples of 3080 m, the common period of every
+// world-space texture scale, so tiled surfaces don't visibly jump.
+export const ORIGIN_STEP = 3080;
+const ORIGIN_SLACK = 2000;
+function setOrigin(x, z) {
+  const o = runtime.origin;
+  const dx = x - o.x;
+  const dz = z - o.z;
+  if (!dx && !dz) return;
+  o.x = x;
+  o.z = z;
+  emit('originShift', { dx, dz });
+}
+function updateOrigin(w) {
+  const p = w.track.pose(w.runner.s, 0, _pose);
+  const o = runtime.origin;
+  if (Math.abs(p.x - o.x) < ORIGIN_SLACK && Math.abs(p.z - o.z) < ORIGIN_SLACK) return;
+  setOrigin(Math.round(p.x / ORIGIN_STEP) * ORIGIN_STEP, Math.round(p.z / ORIGIN_STEP) * ORIGIN_STEP);
+}
 
 // Make the next run's world ahead of time (its chunks are built in the
 // background while the landing or game-over screen is showing).
@@ -36,6 +59,7 @@ export function startWorld(mode, seed) {
     runtime.world = next;
     runtime.nextWorld = null;
   } else runtime.world = createWorld(seed ?? randomSeed());
+  setOrigin(0, 0);
   runtime.mode = mode;
   runtime.bot = mode === 'attract' ? createBot({ skill: 0.92, showOff: true }) : null;
   runtime.acc = 0;
@@ -90,6 +114,7 @@ export function tick(dt) {
   if (steps === 6) runtime.acc = 0;
   runtime.alpha = runtime.acc / STEP;
   mirror(w);
+  updateOrigin(w);
 }
 
 function snapshot(w) {
@@ -169,9 +194,9 @@ export function lerpEntity(e, prevMap, out = {}) {
 // track space → world space
 export function toWorld(s, d, y, out) {
   const p = runtime.world.track.pose(s, d, _pose);
-  out.x = p.x;
+  out.x = p.x - runtime.origin.x;
   out.y = y;
-  out.z = p.z;
+  out.z = p.z - runtime.origin.z;
   return p.h;
 }
 const _pose = {};
@@ -186,5 +211,6 @@ export function fastForward(toS) {
     drainEvents(w);
   }
   snapshot(w);
+  updateOrigin(w);
   setGame({ segVersion: getGame().segVersion + 1, objVersion: getGame().objVersion + 1 });
 }

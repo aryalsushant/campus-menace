@@ -5,6 +5,9 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 export const shared = {
   uTime: { value: 0 },
   uNight: { value: 0 },
+  // the floating origin, added back by procedural shaders so their noise
+  // stays continuous when the scene re-centres
+  uOrigin: { value: new THREE.Vector3() },
 };
 
 // --- procedural paving texture (warm stone pavers, running bond)
@@ -86,9 +89,10 @@ export function withDetail(material, kind, extra) {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
+    sh.uniforms.uOrigin = shared.uOrigin;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN; uniform vec3 uOrigin;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz + uOrigin;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + DETAIL_COMMON)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + DETAIL[kind] + (extra || ''));
@@ -187,11 +191,11 @@ export function materials() {
   };
 
   const water = new THREE.ShaderMaterial({
-    uniforms: { uTime: shared.uTime, uNight: shared.uNight },
+    uniforms: { uTime: shared.uTime, uNight: shared.uNight, uOrigin: shared.uOrigin },
     transparent: false,
     vertexShader: /* glsl */ `
-      varying vec3 vW;
-      void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }
+      varying vec3 vW; uniform vec3 uOrigin;
+      void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz + uOrigin; gl_Position = projectionMatrix * viewMatrix * w; }
     `,
     fragmentShader: /* glsl */ `
       uniform float uTime; uniform float uNight; varying vec3 vW;

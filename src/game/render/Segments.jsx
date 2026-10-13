@@ -115,16 +115,24 @@ export default function Segments() {
   useGame(s => s.chunkVersion);
   const texReady = useGame(s => s.texReady);
   const world = runtime.world;
+  // chunk geometry is in absolute coordinates; shift it by the floating origin
+  const root = useRef();
+  useFrame(() => {
+    if (root.current) root.current.position.set(-runtime.origin.x, 0, -runtime.origin.z);
+  }, -20);
   useEffect(() => {
     releaseChunks([runtime.world, runtime.nextWorld]);
   });
-  if (!world) return null;
-  const segs = world.segments;
-  return segs.map((seg, i) => {
-    // chunks build while the textures load; they draw once both are ready
-    const g = requestChunk(world, seg, segs[i - 1]);
-    if (!g || !texReady) return null;
-    const key = `${world.seed}:${seg.id}`;
-    return seg.kind === 'section' ? <Section key={key} g={g} /> : <Crossing key={key} g={g} />;
-  });
+  const segs = world ? world.segments : [];
+  return (
+    <group ref={root}>
+      {segs.map((seg, i) => {
+        // chunks build while the textures load; they draw once both are ready
+        const g = requestChunk(world, seg, segs[i - 1]);
+        if (!g || !texReady) return null;
+        const key = `${world.seed}:${seg.id}`;
+        return seg.kind === 'section' ? <Section key={key} g={g} /> : <Crossing key={key} g={g} />;
+      })}
+    </group>
+  );
 }

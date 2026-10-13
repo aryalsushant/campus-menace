@@ -28,6 +28,14 @@ export default function CameraRig() {
       on('shieldBreak', kick(0.3)),
       on('land', e => (st.current.shake = Math.max(st.current.shake, Math.min(0.25, (e.impact || 0) / 60)))),
       on('worldReset', () => (st.current.init = false)),
+      on('originShift', ({ dx, dz }) => {
+        st.current.pos.x -= dx;
+        st.current.pos.z -= dz;
+        st.current.look.x -= dx;
+        st.current.look.z -= dz;
+        camera.position.x -= dx;
+        camera.position.z -= dz;
+      }),
     ];
     return () => offs.forEach(f => f());
   }, []);
