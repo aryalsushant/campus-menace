@@ -20,10 +20,22 @@ export const runtime = {
   prevCans: new Map(),
   startedAt: 0,
   runId: null,
+  nextWorld: null,
 };
 
-export function startWorld(mode, seed = randomSeed()) {
-  runtime.world = createWorld(seed);
+// Make the next run's world ahead of time (its chunks are built in the
+// background while the landing or game-over screen is showing).
+export function prepareWorld(seed = randomSeed() & 0x7fffffff) {
+  runtime.nextWorld = createWorld(seed);
+  return runtime.nextWorld;
+}
+
+export function startWorld(mode, seed) {
+  const next = runtime.nextWorld;
+  if (mode === 'play' && next && (seed == null || seed === next.seed)) {
+    runtime.world = next;
+    runtime.nextWorld = null;
+  } else runtime.world = createWorld(seed ?? randomSeed());
   runtime.mode = mode;
   runtime.bot = mode === 'attract' ? createBot({ skill: 0.92, showOff: true }) : null;
   runtime.acc = 0;

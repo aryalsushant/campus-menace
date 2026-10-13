@@ -7,7 +7,7 @@ import { attachKeyboard, attachTouch } from './game/input/controls';
 import { wireAudio } from './game/audio/wire';
 import { setMuted } from './game/audio/sound';
 import { api } from './lib/api';
-import { startRun, togglePause, wireFlow } from './ui/flow';
+import { startRun, togglePause, wireFlow, prepareNextRun } from './ui/flow';
 import Landing from './ui/Landing.jsx';
 import Hud from './ui/Hud.jsx';
 import { PauseMenu, GameOver } from './ui/Menus.jsx';
@@ -56,6 +56,11 @@ export default function App() {
 
   useEffect(() => wireAudio(), []);
   useEffect(() => wireFlow(), []);
+  // prebuild the first run's world while the landing screen shows
+  useEffect(() => {
+    const id = setTimeout(prepareNextRun, 1200);
+    return () => clearTimeout(id);
+  }, []);
   useEffect(() => setMuted(muted), [muted]);
   useEffect(
     () =>

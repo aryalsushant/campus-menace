@@ -1,4 +1,5 @@
-import { runtime, startWorld } from '../game/core/runtime';
+import { runtime, startWorld, prepareWorld } from '../game/core/runtime';
+import { prebuildWorld } from '../game/render/chunks';
 import { getGame, setGame } from '../game/core/store';
 import { on } from '../game/core/bus';
 import { readInput, clearInput, enableTilt, calibrateTilt } from '../game/input/controls';
@@ -26,7 +27,8 @@ export async function startRun() {
   clearInput();
   // Space throws now: make sure no button keeps focus during the run
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-  const seed = randomSeed() & 0x7fffffff;
+  // use the world prepared in the background, if there is one
+  const seed = runtime.nextWorld ? runtime.nextWorld.seed : randomSeed() & 0x7fffffff;
   startWorld('play', seed);
   runtime.input = readInput;
   // the run token comes from the server; the run starts immediately regardless
@@ -45,6 +47,7 @@ export function backToMenu() {
   clearTimeout(overTimer);
   runtime.input = null;
   startWorld('attract');
+  prepareNextRun();
   setGame({ phase: 'landing', paused: false, result: null });
 }
 
@@ -75,6 +78,8 @@ export function wireFlow() {
     };
     clearTimeout(overTimer);
     overTimer = setTimeout(() => setGame({ phase: 'over', result: { ...result, ...(getGame().result || {}) } }), 1400);
+    // build the next run's world while the game-over screen shows
+    setTimeout(prepareNextRun, 600);
     submit(result);
   });
 }
@@ -93,6 +98,10 @@ async function submit(result) {
     const cur = getGame().result;
     setGame({ result: { ...(cur || result), submit: 'failed', error: err.message } });
   }
+}
+
+export function prepareNextRun() {
+  if (!runtime.nextWorld) prebuildWorld(prepareWorld());
 }
 
 export { clearInput };
