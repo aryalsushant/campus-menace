@@ -45,7 +45,6 @@ function RiderModel({ slot }) {
       head: glowMat('#fff4d6'),
       phone: glowMat('#9fd8ff'),
       black: std('#111111'),
-      beam: new THREE.MeshBasicMaterial({ color: '#fff4d6', transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
       ring: new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff3b30').multiplyScalar(1.6), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }),
     }),
     [slot]
@@ -124,9 +123,6 @@ function RiderModel({ slot }) {
         </mesh>
         <mesh position={[0, 1.02, -0.55]} material={M.head}>
           <sphereGeometry args={[0.035, 10, 8]} />
-        </mesh>
-        <mesh position={[0, 0.8, -2.2]} rotation={[-Math.PI / 2 - 0.12, 0, 0]} material={M.beam}>
-          <coneGeometry args={[0.8, 3.4, 16, 1, true]} />
         </mesh>
       </group>
       {/* ------------------------------------------------ rider (rigged person, added on load) */}

@@ -277,7 +277,7 @@ function FillLight() {
     L.position.copy(camera.position).addScaledVector(dir, -4).add({ x: 0, y: 6, z: 0 });
     target.position.copy(camera.position).addScaledVector(dir, 20);
     L.target = target;
-    L.intensity = 0.75 + SKY.night * 0.3;
+    L.intensity = 1.0 + SKY.night * 0.3;
     L.color.copy(SKY.sunColor).lerp(SKY.hemiSky, 0.5);
   });
   return <directionalLight ref={ref} />;

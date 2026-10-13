@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { Builder, gableGeometry, color } from './geo';
+import { Builder, color } from './geo';
+import { Cards } from './foliage';
+import { hall, rotundaLandmark, gateway, eagleStatue, stadium } from './architecture';
+import { liveOak, longleafPine, magnolia, azalea, tuft } from './trees';
 import { createRng } from '../sim/rng';
 
 // Geometry for one section or crossing, built once when it is generated.
@@ -77,8 +80,8 @@ class Soup {
 const THEMES = [
   {
     // main campus: autumn
-    lawn: '#7fb35a',
-    lawn2: '#6aa04c',
+    lawn: '#a8e070',
+    lawn2: '#93d05e',
     curb: '#d9d2c4',
     hedge: '#3f7f3a',
     earth: '#6b4a34',
@@ -120,6 +123,25 @@ const THEMES = [
 ];
 export const themeOf = stage => THEMES[stage];
 
+// ----------------------------------------------------------------- material kit
+// One Builder per material; Segments maps each key to a material.
+export const KIT_KEYS = ['brick', 'plaster', 'stone', 'slate', 'concrete', 'grass', 'earth', 'leaf', 'bark', 'planks', 'marble', 'bronze', 'metal', 'props', 'glow', 'windows', 'water', 'spray'];
+export function makeKit(rnd) {
+  const K = {};
+  for (const k of KIT_KEYS) K[k] = new Builder(rnd.next);
+  K.cards = new Cards();
+  // aliases used by older helpers
+  K.roof = K.slate;
+  K.canopy = K.leaf;
+  K.build = () => {
+    const out = {};
+    for (const k of KIT_KEYS) out[k] = K[k].build();
+    out.cards = K.cards.build();
+    return out;
+  };
+  return K;
+}
+
 // ----------------------------------------------------------------- sections
 export function buildSection(seg, track) {
   const rnd = createRng(seg.seed);
@@ -128,8 +150,9 @@ export function buildSection(seg, track) {
   const w = seg.w;
   const outer = w + 1.2 + (seg.stage === 0 ? T.outer : T.outer + rnd.range(0, 4));
   const ss = sampleS(seg.s0, seg.s1, 2);
+  const K = makeKit(rnd);
 
-  // ---- walkway (textured)
+  // ---- walkway: herringbone brick (UV-mapped, ~2 m per texture tile)
   const pathGeo = (() => {
     const pos = [];
     const uv = [];
@@ -139,7 +162,7 @@ export function buildSection(seg, track) {
       for (const d of [-w - 0.05, w + 0.05]) {
         const v = wp(track, s, d, y);
         pos.push(v.x, v.y, v.z);
-        uv.push(d / 2.4, s / 2.4);
+        uv.push(d / 2, s / 2);
       }
       if (i > 0) {
         const a = (i - 1) * 2;
@@ -155,71 +178,44 @@ export function buildSection(seg, track) {
       g.setIndex(idx.map((_, k) => idx[k - (k % 3) + [0, 2, 1][k % 3]]));
       g.computeVertexNormals();
     }
+    g.computeTangents && g.attributes.uv && g.index && g.computeTangents();
     g.computeBoundingSphere();
     return g;
   })();
 
-  // ---- lawn (stripes need a uv-like attribute)
-  const lawnGeo = (() => {
-    const pos = [];
-    const col = [];
-    const auv = [];
-    const idx = [];
-    const ca = color(T.lawn);
-    const cb = color(T.lawn2);
-    const ds = [-outer, -(w + 1.15), w + 1.15, outer];
-    ss.forEach((s, i) => {
-      const y = H(s) - 0.03;
-      for (const d of ds) {
-        const v = wp(track, s, d, y);
-        pos.push(v.x, v.y, v.z);
-        const c = ca.clone().lerp(cb, rnd.next());
-        col.push(c.r, c.g, c.b);
-        auv.push(Math.abs(d), s);
-      }
-      if (i > 0) {
-        const a = (i - 1) * 4;
-        const b = i * 4;
-        // left strip (0-1) and right strip (2-3)
-        idx.push(a, b, a + 1, a + 1, b, b + 1);
-        idx.push(a + 2, b + 2, a + 3, a + 3, b + 2, b + 3);
-      }
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.setAttribute('auv', new THREE.Float32BufferAttribute(auv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    if (g.attributes.normal.getY(0) < 0) {
-      g.setIndex(idx.map((_, k) => idx[k - (k % 3) + [0, 2, 1][k % 3]]));
-      g.computeVertexNormals();
-    }
-    g.computeBoundingSphere();
-    return g;
-  })();
-
-  // ---- terrain: curbs, edge walls, skirts, end caps
-  const terrain = new Builder(rnd.next);
-  const soup = new Soup();
+  // ---- lawn in mowed bands, curbs, skirts and end caps
+  const lawn = new Soup();
+  const curb = new Soup();
+  const earthS = new Soup();
+  const lawnA = color(T.lawn);
+  const lawnB = color(T.lawn2);
   const curbC = color(T.curb);
   const earth = color(T.earth);
   const rock = color(T.rock);
   const deep = T.depth;
   const bottomInset = seg.stage === 2 ? 0.45 : seg.stage === 1 ? 0.8 : 1;
+  const band = 3;
   for (let i = 1; i < ss.length; i++) {
     const a = ss[i - 1];
     const b = ss[i];
     const ya = H(a);
     const yb = H(b);
     for (const side of [-1, 1]) {
-      // curb: raised strip between path and edge wall
+      // mowed stripes running along the path
+      let k = 0;
+      for (let d0 = w + 1.15; d0 < outer - 0.01; d0 += band, k++) {
+        const d1 = Math.min(outer, d0 + band);
+        const c = (k % 2 ? lawnA : lawnB).clone().multiplyScalar(0.96 + 0.08 * pseudo(a * 0.3 + d0));
+        lawn.quad(wp(track, a, side * d0, ya - 0.03), wp(track, b, side * d0, yb - 0.03), wp(track, b, side * d1, yb - 0.03), wp(track, a, side * d1, ya - 0.03), c, UP);
+      }
+      // curb between path and edge wall
       const c0 = side * (w + 0.05);
       const c1 = side * (w + 0.4);
       const ct = 0.16;
       const out = wp(track, a, side * 10, ya).sub(wp(track, a, 0, ya)).normalize();
-      soup.quad(wp(track, a, c0, ya + ct), wp(track, b, c0, yb + ct), wp(track, b, c1, yb + ct), wp(track, a, c1, ya + ct), curbC, UP);
-      soup.quad(wp(track, a, c0, ya), wp(track, b, c0, yb), wp(track, b, c0, yb + ct), wp(track, a, c0, ya + ct), curbC.clone().multiplyScalar(0.85), out.clone().negate());
+      curb.quad(wp(track, a, c0, ya + ct), wp(track, b, c0, yb + ct), wp(track, b, c1, yb + ct), wp(track, a, c1, ya + ct), curbC, UP);
+      curb.quad(wp(track, a, c0, ya), wp(track, b, c0, yb), wp(track, b, c0, yb + ct), wp(track, a, c0, ya + ct), curbC.clone().multiplyScalar(0.9), out.clone().negate());
+      curb.quad(wp(track, a, c1, ya - 0.03), wp(track, b, c1, yb - 0.03), wp(track, b, side * (w + 1.15), yb - 0.03), wp(track, a, side * (w + 1.15), ya - 0.03), color('#8a7a62'), UP);
       // skirt down the outer edge, jagged and tapering for islands
       const oa = side * outer;
       const ia = side * outer * bottomInset;
@@ -231,15 +227,14 @@ export function buildSection(seg, track) {
       const bot1 = wp(track, b, ia, yb - jb);
       const mid0 = wp(track, a, side * outer * (0.5 + bottomInset * 0.5), ya - ja * 0.45);
       const mid1 = wp(track, b, side * outer * (0.5 + bottomInset * 0.5), yb - jb * 0.45);
-      soup.quad(top0, top1, mid1, mid0, earth.clone().multiplyScalar(0.92 + 0.12 * pseudo(a)), out);
-      soup.quad(mid0, mid1, bot1, bot0, rock.clone().multiplyScalar(0.85 + 0.15 * pseudo(a + 3)), out);
+      earthS.quad(top0, top1, mid1, mid0, earth.clone().multiplyScalar(0.92 + 0.12 * pseudo(a)), out);
+      earthS.quad(mid0, mid1, bot1, bot0, rock.clone().multiplyScalar(0.85 + 0.15 * pseudo(a + 3)), out);
       if (seg.stage === 2) {
-        // underside cone toward a keel line
         const keel0 = wp(track, a, side * 1.5, ya - deep * 1.9 * (0.8 + 0.3 * pseudo(a * 0.5)));
         const keel1 = wp(track, b, side * 1.5, yb - deep * 1.9 * (0.8 + 0.3 * pseudo(b * 0.5)));
-        soup.quad(bot0, bot1, keel1, keel0, rock.clone().multiplyScalar(0.7), new THREE.Vector3(0, -1, 0).add(out).normalize());
+        earthS.quad(bot0, bot1, keel1, keel0, rock.clone().multiplyScalar(0.7), new THREE.Vector3(0, -1, 0).add(out).normalize());
       } else {
-        soup.quad(bot0, bot1, wp(track, b, 0, yb - jb), wp(track, a, 0, ya - ja), rock.clone().multiplyScalar(0.6), new THREE.Vector3(0, -1, 0));
+        earthS.quad(bot0, bot1, wp(track, b, 0, yb - jb), wp(track, a, 0, ya - ja), rock.clone().multiplyScalar(0.6), new THREE.Vector3(0, -1, 0));
       }
     }
   }
@@ -262,31 +257,20 @@ export function buildSection(seg, track) {
       const strata = [earth, rock, rock.clone().multiplyScalar(0.8)];
       const levels = [0, 0.35, 0.7, 1];
       for (let l = 0; l < 3; l++) {
-        const ya0 = y - 0.03 - j0 * levels[l];
-        const ya1 = y - 0.03 - j0 * levels[l + 1];
-        const yb0 = y - 0.03 - j1 * levels[l];
-        const yb1 = y - 0.03 - j1 * levels[l + 1];
         const x0a = d0 + (lt - d0) * levels[l];
         const x0b = d0 + (lt - d0) * levels[l + 1];
         const x1a = d1 + (rt - d1) * levels[l];
         const x1b = d1 + (rt - d1) * levels[l + 1];
-        soup.quad(wp(track, s, x0a, ya0), wp(track, s, x1a, yb0), wp(track, s, x1b, yb1), wp(track, s, x0b, ya1), strata[l].clone().multiplyScalar(0.9 + 0.2 * pseudo(d0 + l)), n);
+        earthS.quad(wp(track, s, x0a, y - 0.03 - j0 * levels[l]), wp(track, s, x1a, y - 0.03 - j1 * levels[l]), wp(track, s, x1b, y - 0.03 - j1 * levels[l + 1]), wp(track, s, x0b, y - 0.03 - j0 * levels[l + 1]), strata[l].clone().multiplyScalar(0.9 + 0.2 * pseudo(d0 + l)), n);
       }
-      // grass lip
-      soup.quad(wp(track, s, d0, y - 0.02), wp(track, s, d1, y - 0.02), wp(track, s, d1, y - 0.35), wp(track, s, d0, y - 0.35), color(T.lawn2).multiplyScalar(0.8), n);
+      lawn.quad(wp(track, s, d0, y - 0.02), wp(track, s, d1, y - 0.02), wp(track, s, d1, y - 0.4), wp(track, s, d0, y - 0.4), lawnB.clone().multiplyScalar(0.8), n);
     }
   }
-  soup.into(terrain);
+  lawn.into(K.grass);
+  curb.into(K.concrete);
+  earthS.into(K.earth);
 
-  // ---- ramps become stairs
-  const props = new Builder(rnd.next);
-  const metal = new Builder(rnd.next);
-  const canopy = new Builder(rnd.next);
-  const glow = new Builder(rnd.next);
-  const windows = new Builder(rnd.next);
-  const brick = new Builder(rnd.next);
-  const roof = new Builder(rnd.next);
-  const leaf = new Builder(rnd.next);
+  // ---- ramps become stone stairs
   const M = new THREE.Matrix4();
   for (const part of seg.parts) {
     if (!part.ramp) continue;
@@ -298,14 +282,13 @@ export function buildSection(seg, track) {
       const lo = Math.min(part.y0, part.y1);
       const hgt = yTop - lo + 0.05;
       alongFrame(track, s, 0, lo + hgt / 2, M);
-      props.addMatrix(new THREE.BoxGeometry(w * 2 + 0.1, hgt, (part.s1 - part.s0) / n + 0.02), M, k % 2 ? '#cfc4b2' : '#c2b6a2', 0.02);
+      K.concrete.addMatrix(new THREE.BoxGeometry(w * 2 + 0.1, hgt, (part.s1 - part.s0) / n + 0.02), M, k % 2 ? '#f0ece4' : '#e4ded2', 0.02);
     }
-    // side walls of the stairs
     for (const side of [-1, 1]) {
       const sm = (part.s0 + part.s1) / 2;
       const hi = Math.max(part.y0, part.y1);
       alongFrame(track, sm, side * (w + 0.25), (Math.min(part.y0, part.y1) + hi) / 2 + 0.4, M);
-      props.addMatrix(new THREE.BoxGeometry(0.5, Math.abs(part.y1 - part.y0) + 1, part.s1 - part.s0), M, '#bfb39f', 0.03);
+      K.stone.addMatrix(new THREE.BoxGeometry(0.5, Math.abs(part.y1 - part.y0) + 1, part.s1 - part.s0), M, '#efe6d4', 0.03);
     }
   }
 
@@ -318,43 +301,28 @@ export function buildSection(seg, track) {
     const len = b - a + 0.04;
     for (const side of [-1, 1]) {
       if (seg.stage === 0) {
-        // clipped hedge, slightly irregular
+        // clipped boxwood hedge
         const hh = 0.82 + pseudo(sm * 0.7 + side) * 0.12;
         alongFrame(track, sm, side * (w + 0.78), ym + hh / 2, M);
-        leaf.addMatrix(new THREE.BoxGeometry(0.72, hh, len), M, T.hedge, 0.1);
+        K.leaf.addMatrix(new THREE.BoxGeometry(0.72, hh, len), M, T.hedge, 0.08);
       } else if (seg.stage === 1) {
-        // jersey barriers with orange/white bands every few metres
         alongFrame(track, sm, side * (w + 0.7), ym + 0.42, M);
-        props.addMatrix(new THREE.BoxGeometry(0.55, 0.84, len), M, i % 3 === 0 ? '#f0f0ea' : '#e46a2a', 0.05);
+        K.concrete.addMatrix(new THREE.BoxGeometry(0.55, 0.84, len), M, i % 3 === 0 ? '#f0f0ea' : '#e46a2a', 0.04);
       } else {
-        // low stone wall with a brass rail
         alongFrame(track, sm, side * (w + 0.7), ym + 0.3, M);
-        props.addMatrix(new THREE.BoxGeometry(0.6, 0.6, len), M, T.hedge, 0.06);
+        K.stone.addMatrix(new THREE.BoxGeometry(0.6, 0.6, len), M, '#efe6d4', 0.05);
         alongFrame(track, sm, side * (w + 0.7), ym + 0.95, M);
-        metal.addMatrix(new THREE.BoxGeometry(0.08, 0.08, len), M, '#d8b56a', 0);
+        K.metal.addMatrix(new THREE.BoxGeometry(0.08, 0.08, len), M, '#d8b56a', 0);
         if (i % 2 === 0) {
           alongFrame(track, a, side * (w + 0.7), ym + 0.75, M);
-          metal.addMatrix(new THREE.BoxGeometry(0.07, 0.4, 0.07), M, '#d8b56a', 0);
+          K.metal.addMatrix(new THREE.BoxGeometry(0.07, 0.4, 0.07), M, '#d8b56a', 0);
         }
       }
     }
   }
 
-  decorate(seg, track, { rnd, T, H, w, outer, props, metal, canopy, glow, windows, brick, roof, leaf });
-
-  return {
-    path: pathGeo,
-    lawn: lawnGeo,
-    terrain: terrain.build(),
-    props: props.build(),
-    metal: metal.build(),
-    canopy: canopy.build(),
-    glow: glow.build(),
-    windows: windows.build(),
-    brick: brick.build(),
-    roof: roof.build(),
-    leaf: leaf.build(),
-  };
+  decorate(seg, track, { rnd, T, H, w, outer, K });
+  return { path: pathGeo, ...K.build() };
 }
 
 function pseudo(x) {
@@ -363,98 +331,137 @@ function pseudo(x) {
 }
 
 // --------------------------------------------------------------- decoration
+const BRICKS = ['#c0644f', '#b25444', '#a84e40', '#c46a52', '#b95c49'];
+
 function decorate(seg, track, ctx) {
-  const { rnd, T, H, w, outer, props, metal, canopy, glow, windows, brick, roof } = ctx;
+  const { rnd, T, H, w, outer, K } = ctx;
   const M = new THREE.Matrix4();
   const len = seg.s1 - seg.s0;
+  const tree = (s, d) => {
+    track.pose(s, d, _p);
+    const y = H(s);
+    const r = rnd.next();
+    if (seg.stage === 2) (r < 0.5 ? magnolia : liveOak)(K, _p.x, y, _p.z, rnd, r < 0.5 ? 0.9 : 0.75);
+    else if (r < 0.45) liveOak(K, _p.x, y, _p.z, rnd, rnd.range(0.85, 1.15));
+    else if (r < 0.75) longleafPine(K, _p.x, y, _p.z, rnd, rnd.range(0.85, 1.1));
+    else magnolia(K, _p.x, y, _p.z, rnd, rnd.range(0.8, 1.05));
+  };
+
+  // the opening gateway: brick piers with urns, an iron arch over the path
+  if (seg.s0 < 1) {
+    alongFrame(track, seg.s0 + 6, 0, H(seg.s0 + 6), M);
+    gateway(K, M, w);
+  }
 
   // lamp posts along both edges
   for (let s = seg.s0 + 6 + rnd.range(0, 4); s < seg.s1 - 4; s += rnd.range(15, 19)) {
     for (const side of [-1, 1]) {
       if (rnd.chance(0.12)) continue;
-      lamp(track, s + (side > 0 ? 7 : 0), side, w + 1.55, H(s), seg.stage, { props, metal, glow }, rnd);
+      lamp(track, s + (side > 0 ? 7 : 0), side, w + 1.55, H(s), seg.stage, K, rnd);
     }
   }
-
-  // benches and bins between lamps
+  // benches between lamps
   if (seg.stage !== 1) {
     for (let s = seg.s0 + 14; s < seg.s1 - 8; s += rnd.range(24, 40)) {
       const side = rnd.sign();
       frame(track, s, side * (w + 2.6), H(s), side, M);
-      bench(M, props, metal);
+      bench(M, K);
     }
   }
 
   if (seg.stage === 0) {
-    // trees on the lawn
-    for (let s = seg.s0 + 4; s < seg.s1 - 3; s += rnd.range(6, 11)) {
+    // live oaks lining the walk so their limbs arch toward the path
+    for (let s = seg.s0 + 4; s < seg.s1 - 3; s += rnd.range(9, 14)) {
       for (const side of [-1, 1]) {
-        if (rnd.chance(0.25)) continue;
-        const d = side * rnd.range(w + 4, w + 13);
-        tree(track, s + rnd.range(-2, 2), d, H(s), T, { props, canopy }, rnd);
+        if (rnd.chance(0.2)) continue;
+        track.pose(s + rnd.range(-2, 2), side * rnd.range(w + 3.4, w + 5), _p);
+        liveOak(K, _p.x, H(s), _p.z, rnd, rnd.range(0.95, 1.2));
       }
     }
-    // campus halls
+    // a second row of pines and magnolias further back
+    for (let s = seg.s0 + 6; s < seg.s1 - 3; s += rnd.range(10, 16)) {
+      for (const side of [-1, 1]) if (rnd.chance(0.7)) tree(s, side * rnd.range(w + 10, w + 15));
+    }
+    // azaleas and grass tufts along the hedge line
+    for (let s = seg.s0 + 3; s < seg.s1 - 2; s += rnd.range(3, 6)) {
+      const side = rnd.sign();
+      track.pose(s, side * (w + 1.9), _p);
+      if (rnd.chance(0.55)) azalea(K, _p.x, H(s), _p.z, rnd, rnd.range(0.8, 1.1));
+      else tuft(K, _p.x, H(s), _p.z, rnd);
+    }
+    // Colonial Revival halls
     for (const side of [-1, 1]) {
       let s = seg.s0 + rnd.range(0, 8);
       while (s < seg.s1 - 10) {
-        const bw = rnd.range(16, 28);
+        const bw = rnd.range(18, 28);
         if (s + bw > seg.s1 + 6) break;
-        const depth = rnd.range(10, 16);
-        const dOff = w + rnd.range(17, 22) + depth / 2;
+        const depth = rnd.range(11, 15);
+        const dOff = w + rnd.range(19, 24) + depth / 2;
         const cs = s + bw / 2;
         frame(track, cs, side * dOff, H(cs) - 0.1, side, M);
-        hall(M, { w: bw, d: depth, floors: rnd.int(2, 4) }, T, { props, windows, metal, brick, roof }, rnd);
+        hall(K, M, rnd, { w: bw, d: depth, floors: rnd.int(2, 3), brick: rnd.pick(BRICKS), cupola: rnd.chance(0.3), rotunda: rnd.chance(0.12), wings: bw > 24 && rnd.chance(0.5) });
+        // foundation plantings
+        for (let x = -bw / 2 + 1; x < bw / 2; x += 2.2) {
+          const m = M.clone().multiply(new THREE.Matrix4().makeTranslation(x, 0, depth / 2 + 1.4));
+          const p = new THREE.Vector3().setFromMatrixPosition(m);
+          azalea(K, p.x, H(cs), p.z, rnd, 0.9);
+        }
         s += bw + rnd.range(6, 14);
       }
     }
-    // a clock tower landmark now and then
-    if (rnd.chance(0.35)) {
+    // landmarks on the skyline: the domed rotunda, a stadium
+    if (rnd.chance(0.32)) {
       const side = rnd.sign();
       const cs = seg.s0 + len * rnd.range(0.3, 0.7);
-      frame(track, cs, side * (w + 38), H(cs), side, M);
-      clockTower(M, T, { props, glow, metal, brick, roof }, rnd);
-    }
-    // plaza: planters and a food truck
-    if (seg.plaza) {
+      frame(track, cs, side * (w + 52), H(cs) - 0.2, side, M);
+      rotundaLandmark(K, M, rnd);
+    } else if (rnd.chance(0.18)) {
       const side = rnd.sign();
       const cs = seg.s0 + len * 0.5;
-      frame(track, cs, side * (w + 4.5), H(cs), side, M);
-      foodTruck(M, { props, metal, glow }, rnd);
+      frame(track, cs, side * (w + 95), H(cs) - 0.5, side, M);
+      stadium(K, M);
+    }
+    // plaza: a bronze eagle on a plinth, a food truck
+    if (seg.plaza) {
+      const side = rnd.sign();
+      const cs = seg.s0 + len * 0.45;
+      frame(track, cs, side * (w + 6), H(cs), side, M);
+      eagleStatue(K, M);
+      frame(track, cs + 18, -side * (w + 4.5), H(cs), -side, M);
+      foodTruck(M, K, rnd);
     }
   } else if (seg.stage === 1) {
     for (let s = seg.s0 + 6; s < seg.s1 - 4; s += rnd.range(9, 16)) {
       const side = rnd.sign();
       const d = side * rnd.range(w + 2.5, Math.min(outer - 2, w + 9));
-      if (rnd.chance(0.5)) {
+      if (rnd.chance(0.55)) {
         frame(track, s, d, H(s), side, M);
-        cones(M, props, rnd);
-      } else tree(track, s, d, H(s), T, { props, canopy }, rnd);
+        cones(M, K, rnd);
+      } else tree(s, d);
     }
-    // concrete frames of half-built halls and a crane on the horizon
     for (const side of [-1, 1]) {
       if (rnd.chance(0.35)) continue;
       const cs = seg.s0 + len * rnd.range(0.25, 0.75);
       frame(track, cs, side * (outer + 10), H(cs) - 4, side, M);
-      frameBuilding(M, { props, metal, glow }, rnd);
+      frameBuilding(M, K, rnd);
     }
     if (rnd.chance(0.55)) {
       const side = rnd.sign();
       const cs = seg.s0 + len * rnd.range(0.2, 0.8);
       frame(track, cs, side * (outer + 26), H(cs) - 10, side, M);
-      crane(M, { metal, glow }, rnd);
+      crane(M, K, rnd);
     }
   } else {
-    // sky campus: blossom trees, a gazebo, floating rocks
-    for (let s = seg.s0 + 5; s < seg.s1 - 3; s += rnd.range(7, 12)) {
+    // sky campus: magnolias and oaks on the island, floating halls and rocks
+    for (let s = seg.s0 + 5; s < seg.s1 - 3; s += rnd.range(8, 13)) {
       const side = rnd.sign();
-      tree(track, s, side * rnd.range(w + 3, outer - 1.5), H(s), T, { props, canopy }, rnd);
+      tree(s, side * rnd.range(w + 3, outer - 1.5));
     }
     if (rnd.chance(0.5)) {
       const side = rnd.sign();
       const cs = seg.s0 + len * rnd.range(0.3, 0.7);
-      frame(track, cs, side * (outer + 14), H(cs) - rnd.range(2, 8), side, M);
-      floatingHall(M, T, { props, windows, metal, canopy, glow, brick, roof }, rnd);
+      frame(track, cs, side * (outer + 16), H(cs) - rnd.range(2, 8), side, M);
+      floatingHall(M, K, T, rnd);
     }
     for (let k = 0; k < 6; k++) {
       const side = rnd.sign();
@@ -462,168 +469,95 @@ function decorate(seg, track, ctx) {
       const d = side * (outer + rnd.range(6, 30));
       track.pose(cs, d, _p);
       const sz = rnd.range(1, 3.4);
-      props.add(new THREE.IcosahedronGeometry(sz, 0), { pos: [_p.x, H(cs) + rnd.range(-14, 6), _p.z], rot: [rnd.next() * 3, rnd.next() * 3, 0], scale: [1, 0.6, 1], color: T.rock, jitter: 0.2 });
-      props.add(new THREE.CylinderGeometry(sz * 0.9, sz * 0.75, 0.3, 7), { pos: [_p.x, H(cs) + rnd.range(-14, 6) + sz * 0.4, _p.z], color: T.lawn, jitter: 0.08 });
+      const yy = H(cs) + rnd.range(-14, 6);
+      K.earth.add(new THREE.IcosahedronGeometry(sz, 0), { pos: [_p.x, yy, _p.z], rot: [rnd.next() * 3, rnd.next() * 3, 0], scale: [1, 0.6, 1], color: T.rock, jitter: 0.2 });
+      K.grass.add(new THREE.CylinderGeometry(sz * 0.9, sz * 0.75, 0.3, 7), { pos: [_p.x, yy + sz * 0.4, _p.z], color: T.lawn, jitter: 0.08 });
     }
   }
 }
 
-function lamp(track, s, side, d, y, stage, { props, metal, glow }, rnd) {
+function lamp(track, s, side, d, y, stage, K, rnd) {
   const M = frame(track, s, side * d, y, side);
-  const part = (geo, pos, c, b = metal, rot) => {
+  const part = (geo, pos, c, b = K.metal, rot) => {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
     b.addMatrix(geo, M.clone().multiply(m), c, 0);
   };
-  const pole = stage === 1 ? '#e8b028' : '#2d3a3a';
-  part(new THREE.CylinderGeometry(0.22, 0.28, 0.4, 8), [0, 0.2, 0], pole);
-  part(new THREE.CylinderGeometry(0.07, 0.09, 3.9, 6), [0, 2.15, 0], pole);
-  part(new THREE.BoxGeometry(0.08, 0.08, 0.9), [0, 4, 0.42], pole);
-  part(new THREE.CylinderGeometry(0.2, 0.28, 0.28, 6), [0, 3.86, 0.84], pole);
-  part(new THREE.SphereGeometry(0.17, 8, 6), [0, 3.66, 0.84], '#ffd9a0', glow);
-  // a club banner on some lamps
-  if (stage !== 1 && rnd.chance(0.45)) {
-    const c = rnd.pick(['#ffb02e', '#e8473f', '#3f8fe8', '#8f5fe8', '#2fbf8f']);
-    part(new THREE.BoxGeometry(0.04, 1.1, 0.55), [0, 2.9, 0.32], c, props);
+  // black acorn-globe lamp post
+  const pole = stage === 1 ? '#e8b028' : '#1f2224';
+  part(new THREE.CylinderGeometry(0.2, 0.26, 0.5, 10), [0, 0.25, 0], pole);
+  part(new THREE.CylinderGeometry(0.07, 0.1, 3.4, 10), [0, 2.1, 0], pole);
+  part(new THREE.CylinderGeometry(0.16, 0.1, 0.25, 10), [0, 3.9, 0], pole);
+  part(new THREE.SphereGeometry(0.26, 14, 10), [0, 4.25, 0], '#ffe2b0', K.glow);
+  part(new THREE.ConeGeometry(0.12, 0.25, 10), [0, 4.62, 0], pole);
+  if (stage !== 1 && rnd.chance(0.5)) {
+    // banner pair in gold and black
+    const c = rnd.chance(0.5) ? '#d4a82a' : '#1d1d20';
+    part(new THREE.BoxGeometry(0.04, 1.1, 0.55), [0, 2.8, 0.34], c, K.props);
+    part(new THREE.BoxGeometry(0.03, 0.03, 0.62), [0, 3.38, 0.3], pole);
   }
 }
 
-function bench(M, props, metal) {
-  const add = (geo, pos, c, b = props) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.04);
-  add(new THREE.BoxGeometry(1.8, 0.08, 0.5), [0, 0.48, 0], '#a0683e');
-  add(new THREE.BoxGeometry(1.8, 0.45, 0.07), [0, 0.8, -0.24], '#a0683e');
-  for (const x of [-0.75, 0.75]) add(new THREE.BoxGeometry(0.08, 0.48, 0.5), [x, 0.24, 0], '#2b2f33', metal);
-  add(new THREE.CylinderGeometry(0.24, 0.22, 0.8, 8), [1.35, 0.4, 0], '#3b5b43');
+function bench(M, K) {
+  const add = (geo, pos, c, b = K.planks) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.03);
+  for (const z of [-0.14, 0, 0.14]) add(new THREE.BoxGeometry(1.9, 0.05, 0.12), [0, 0.48, z], '#c08a5a');
+  for (const y of [0.68, 0.84]) add(new THREE.BoxGeometry(1.9, 0.1, 0.04), [0, y, -0.24], '#c08a5a');
+  for (const x of [-0.8, 0.8]) {
+    add(new THREE.BoxGeometry(0.06, 0.48, 0.5), [x, 0.24, 0], '#1f2224', K.metal);
+    add(new THREE.BoxGeometry(0.06, 0.5, 0.06), [x, 0.7, -0.24], '#1f2224', K.metal);
+  }
+  add(new THREE.CylinderGeometry(0.26, 0.24, 0.85, 12), [1.45, 0.42, 0], '#2f3a34', K.metal);
 }
 
-function tree(track, s, d, y, T, { props, canopy }, rnd) {
-  track.pose(s, d, _p);
-  const h = rnd.range(2.2, 3.4);
-  const r = rnd.range(1.6, 2.6);
-  props.add(new THREE.CylinderGeometry(0.16, 0.28, h, 6), { pos: [_p.x, y + h / 2, _p.z], color: '#5b3a28', jitter: 0.1 });
-  const c = rnd.pick(T.trees);
-  const blobs = rnd.int(2, 3);
-  for (let i = 0; i < blobs; i++) {
-    canopy.add(new THREE.IcosahedronGeometry(r * rnd.range(0.65, 1), 0), {
-      pos: [_p.x + rnd.range(-0.8, 0.8), y + h + r * 0.6 + i * 0.5, _p.z + rnd.range(-0.8, 0.8)],
-      rot: [rnd.next() * 3, rnd.next() * 3, 0],
-      color: i === 0 ? c : rnd.chance(0.6) ? c : rnd.pick(T.trees),
-      jitter: 0.18,
-    });
-  }
-}
-
-// brick campus hall: front face +z toward the path
-function hall(M, { w, d, floors }, T, { props, windows, metal, brick, roof }, rnd) {
-  const brickC = rnd.pick(T.bricks);
-  const trim = '#f1e8d6';
-  const fh = 3.3;
-  const H = floors * fh + 0.8;
-  const add = (geo, pos, c, b = props, jitter = 0.05, rot) => {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
-    b.addMatrix(geo, M.clone().multiply(m), c, jitter);
-  };
-  add(new THREE.BoxGeometry(w + 0.4, 0.8, d + 0.4), [0, 0.4, 0], '#b9ad98');
-  add(new THREE.BoxGeometry(w, H, d), [0, H / 2 + 0.4, 0], brickC, brick, 0.04);
-  for (let f = 1; f <= floors; f++) add(new THREE.BoxGeometry(w + 0.16, 0.18, d + 0.16), [0, 0.4 + f * fh, 0], trim, props, 0.02);
-  // roof
-  const roofC = rnd.pick(T.roof);
-  if (rnd.chance(0.7)) {
-    add(gableGeometry(d + 0.8, rnd.range(2.4, 3.6), w + 0.6), [0, H + 0.4, 0], roofC, roof, 0.04, [0, Math.PI / 2, 0]);
-  } else {
-    add(new THREE.BoxGeometry(w + 0.3, 0.6, d + 0.3), [0, H + 0.7, 0], trim);
-    add(new THREE.SphereGeometry(Math.min(w, d) * 0.28, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), [0, H + 1, 0], '#6f9a8a', metal);
-  }
-  // windows on the front face
-  const cols = Math.max(2, Math.floor((w - 2) / 2.3));
-  for (let f = 0; f < floors; f++) {
-    for (let c = 0; c < cols; c++) {
-      const x = -w / 2 + 1.4 + (c * (w - 2.8)) / Math.max(1, cols - 1);
-      const y = 0.4 + f * fh + 1.75;
-      const mid = Math.abs(x) < 1.6 && f === 0;
-      if (mid) continue;
-      add(new THREE.BoxGeometry(1.15, 1.75, 0.08), [x, y, d / 2 + 0.03], trim, props, 0);
-      const lit = rnd.next();
-      const wc = lit > 0.35 ? new THREE.Color('#ffd78a').multiplyScalar(0.75 + lit * 0.4) : new THREE.Color('#5a6a8a');
-      add(new THREE.PlaneGeometry(0.9, 1.5), [x, y, d / 2 + 0.08], wc, windows, 0);
-    }
-  }
-  // entrance with columns
-  add(new THREE.BoxGeometry(2.4, 2.8, 0.2), [0, 1.8, d / 2 + 0.02], '#3a2a24');
-  add(new THREE.BoxGeometry(3.6, 0.5, 1.6), [0, 0.25, d / 2 + 0.8], '#cfc4b2');
-  if (rnd.chance(0.5)) {
-    for (const x of [-1.5, -0.5, 0.5, 1.5]) add(new THREE.CylinderGeometry(0.2, 0.22, 3.6, 8), [x * 1.3, 2.2, d / 2 + 1.2], trim);
-    add(gableGeometry(5.4, 1.2, 1.6), [0, 4, d / 2 + 1.2], trim);
-  }
-}
-
-function clockTower(M, T, { props, glow, metal, brick, roof }, rnd) {
-  const add = (geo, pos, c, b = props, rot) => {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
-    b.addMatrix(geo, M.clone().multiply(m), c, 0.05);
-  };
-  add(new THREE.BoxGeometry(5, 18, 5), [0, 9, 0], rnd.pick(T.bricks), brick);
-  add(new THREE.BoxGeometry(5.6, 0.5, 5.6), [0, 18, 0], '#f1e8d6');
-  add(new THREE.BoxGeometry(4.4, 4, 4.4), [0, 20.2, 0], '#f1e8d6');
-  add(new THREE.ConeGeometry(3.6, 6, 4), [0, 25.2, 0], rnd.pick(T.roof), roof, [0, Math.PI / 4, 0]);
-  for (const r of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
-    const m = new THREE.Matrix4().makeRotationY(r).multiply(new THREE.Matrix4().makeTranslation(0, 20.2, 2.22));
-    glow.addMatrix(new THREE.CircleGeometry(1.5, 20), M.clone().multiply(m), '#fff2cf', 0);
-    const hand = new THREE.Matrix4().makeRotationY(r).multiply(new THREE.Matrix4().makeTranslation(0.3, 20.5, 2.26)).multiply(new THREE.Matrix4().makeRotationZ(-0.9));
-    metal.addMatrix(new THREE.BoxGeometry(0.12, 1.1, 0.04), M.clone().multiply(hand), '#2a2a2a', 0);
-  }
-}
-
-function foodTruck(M, { props, metal, glow }, rnd) {
-  const add = (geo, pos, c, b = props) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.04);
+function foodTruck(M, K, rnd) {
+  const add = (geo, pos, c, b = K.props) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.03);
   const c = rnd.pick(['#ff8a3d', '#3fb4e8', '#f2c63a', '#e8476a']);
-  add(new THREE.BoxGeometry(5.6, 2.6, 2.4), [0, 1.9, 0], c);
-  add(new THREE.BoxGeometry(1.8, 1.8, 2.3), [3.6, 1.5, 0], c);
+  add(new THREE.BoxGeometry(5.6, 2.6, 2.4), [0, 1.9, 0], c, K.metal);
+  add(new THREE.BoxGeometry(1.8, 1.8, 2.3), [3.6, 1.5, 0], c, K.metal);
   add(new THREE.BoxGeometry(3, 1, 0.1), [-0.4, 2.2, 1.22], '#2a2f36');
-  add(new THREE.BoxGeometry(3.4, 0.12, 0.9), [-0.4, 1.55, 1.6], '#f5f0e6');
-  add(new THREE.BoxGeometry(2.8, 0.5, 0.06), [-0.4, 3.4, 1.21], '#fff6e0', glow);
-  for (const x of [-1.8, 1.8, 3.6]) for (const z of [-1.1, 1.1]) add(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10), [x, 0.42, z], '#222', metal);
+  add(new THREE.BoxGeometry(3.4, 0.12, 0.9), [-0.4, 1.55, 1.6], '#f5f0e6', K.metal);
+  add(new THREE.BoxGeometry(2.8, 0.5, 0.06), [-0.4, 3.4, 1.21], '#fff6e0', K.glow);
+  for (const x of [-1.8, 1.8, 3.6]) for (const z of [-1.1, 1.1]) add(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 14), [x, 0.42, z], '#222');
 }
 
-function cones(M, props, rnd) {
+function cones(M, K, rnd) {
   const n = rnd.int(2, 4);
   for (let i = 0; i < n; i++) {
     const m = M.clone().multiply(new THREE.Matrix4().makeTranslation(rnd.range(-1.4, 1.4), 0.35, rnd.range(-1, 1)));
-    props.addMatrix(new THREE.ConeGeometry(0.25, 0.7, 8), m, i % 2 ? '#ff7a2a' : '#ff9a3a', 0.04);
+    K.props.addMatrix(new THREE.ConeGeometry(0.25, 0.7, 12), m, i % 2 ? '#ff7a2a' : '#ff9a3a', 0.04);
   }
-  props.addMatrix(new THREE.IcosahedronGeometry(1.6, 0), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.6, -2.5)).multiply(new THREE.Matrix4().makeScale(1.4, 0.6, 1)), '#8a6a4a', 0.15);
+  K.earth.addMatrix(new THREE.IcosahedronGeometry(1.6, 1), M.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.6, -2.5)).multiply(new THREE.Matrix4().makeScale(1.4, 0.6, 1)), '#a08060', 0.15);
 }
 
-function frameBuilding(M, { props, metal, glow }, rnd) {
+function frameBuilding(M, K, rnd) {
   const floors = rnd.int(3, 6);
   const W = rnd.range(14, 22);
   const D = 10;
-  const add = (geo, pos, c, b = props) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.05);
-  for (let f = 0; f <= floors; f++) add(new THREE.BoxGeometry(W, 0.4, D), [0, f * 3.4, 0], '#b6b2aa');
-  for (let x = -W / 2; x <= W / 2 + 0.01; x += W / 4) for (const z of [-D / 2, D / 2]) add(new THREE.BoxGeometry(0.5, floors * 3.4, 0.5), [x, (floors * 3.4) / 2, z], '#a8a49c');
-  for (let f = 0; f < floors; f++) add(new THREE.BoxGeometry(W + 1.2, 0.08, 0.08), [0, f * 3.4 + 1.2, D / 2 + 0.6], '#e0b030', metal);
-  add(new THREE.SphereGeometry(0.25, 6, 4), [W / 2, floors * 3.4 + 0.5, D / 2], '#ff5a3a', glow);
+  const add = (geo, pos, c, b = K.concrete) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.05);
+  for (let f = 0; f <= floors; f++) add(new THREE.BoxGeometry(W, 0.4, D), [0, f * 3.4, 0], '#d6d2ca');
+  for (let x = -W / 2; x <= W / 2 + 0.01; x += W / 4) for (const z of [-D / 2, D / 2]) add(new THREE.BoxGeometry(0.5, floors * 3.4, 0.5), [x, (floors * 3.4) / 2, z], '#cfcbc2');
+  for (let f = 0; f < floors; f++) add(new THREE.BoxGeometry(W + 1.2, 0.08, 0.08), [0, f * 3.4 + 1.2, D / 2 + 0.6], '#e0b030', K.metal);
+  add(new THREE.SphereGeometry(0.25, 6, 4), [W / 2, floors * 3.4 + 0.5, D / 2], '#ff5a3a', K.glow);
 }
 
-function crane(M, { metal, glow }, rnd) {
+function crane(M, K, rnd) {
   const h = rnd.range(30, 42);
-  const add = (geo, pos, c, b = metal) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.02);
+  const add = (geo, pos, c, b = K.metal) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.02);
   add(new THREE.BoxGeometry(1.2, h, 1.2), [0, h / 2, 0], '#e8b020');
   add(new THREE.BoxGeometry(26, 0.9, 0.9), [7, h, 0], '#e8b020');
   add(new THREE.BoxGeometry(3, 1.6, 1.6), [-5, h - 0.6, 0], '#555a60');
   add(new THREE.BoxGeometry(0.06, 9, 0.06), [16, h - 4.5, 0], '#333');
-  add(new THREE.SphereGeometry(0.3, 6, 4), [20, h + 0.6, 0], '#ff3a2a', glow);
+  add(new THREE.SphereGeometry(0.3, 6, 4), [20, h + 0.6, 0], '#ff3a2a', K.glow);
 }
 
-function floatingHall(M, T, { props, windows, metal, canopy, glow, brick, roof }, rnd) {
-  const add = (geo, pos, c, b = props, rot) => {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), new THREE.Vector3(1, 1, 1));
-    b.addMatrix(geo, M.clone().multiply(m), c, 0.08);
-  };
-  add(new THREE.CylinderGeometry(9, 2.5, 9, 7), [0, -4.5, 0], T.rock);
-  add(new THREE.CylinderGeometry(9.2, 9, 0.5, 7), [0, 0, 0], T.lawn);
-  hall(M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.2, 0)), { w: 10, d: 7, floors: 2 }, T, { props, windows, metal, brick, roof }, rnd);
-  for (const x of [-6.5, 6.5]) canopy.addMatrix(new THREE.IcosahedronGeometry(1.8, 0), M.clone().multiply(new THREE.Matrix4().makeTranslation(x, 3.4, 2)), rnd.pick(T.trees), 0.2);
-  add(new THREE.SphereGeometry(0.3, 6, 4), [0, 9.5, 0], '#ffe2a0', glow);
+function floatingHall(M, K, T, rnd) {
+  const add = (geo, pos, c, b) => b.addMatrix(geo, M.clone().multiply(new THREE.Matrix4().makeTranslation(...pos)), c, 0.06);
+  add(new THREE.CylinderGeometry(12, 3, 10, 9), [0, -5, 0], T.rock, K.earth);
+  add(new THREE.CylinderGeometry(12.2, 12, 0.5, 9), [0, 0, 0], T.lawn, K.grass);
+  hall(K, M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.2, 0)), rnd, { w: 14, d: 9, floors: 2, brick: rnd.pick(BRICKS), cupola: true });
+  for (const x of [-9, 9]) {
+    const p = new THREE.Vector3().setFromMatrixPosition(M.clone().multiply(new THREE.Matrix4().makeTranslation(x, 0.2, 2)));
+    magnolia(K, p.x, p.y, p.z, rnd, 0.7);
+  }
 }
 
 // ---------------------------------------------------------------- crossings
@@ -631,10 +565,11 @@ export function buildCrossing(seg, world, prevSeg) {
   const track = world.track;
   const rnd = createRng(seg.seed);
   const T = THEMES[seg.stage];
-  const props = new Builder(rnd.next);
-  const metal = new Builder(rnd.next);
-  const glow = new Builder(rnd.next);
-  const terrain = new Builder(rnd.next);
+  const K = makeKit(rnd);
+  const props = K.props;
+  const metal = K.metal;
+  const glow = K.glow;
+  const terrain = K.earth;
   const M = new THREE.Matrix4();
   const pads = seg.padIds.map(id => world.surfaces.pads.find(p => p.id === id)).filter(Boolean);
   const collapse = [];
@@ -725,8 +660,8 @@ export function buildCrossing(seg, world, prevSeg) {
       const y = p.y0 + (p.y1 - p.y0) * ((s - p.s0) / (p.s1 - p.s0));
       alongFrame(track, s, dc, y - 0.08, M);
       M.multiply(new THREE.Matrix4().makeRotationY((rnd.next() - 0.5) * 0.05));
-      const c = style === 'stone' ? (k % 2 ? '#c9bfae' : '#bdb2a0') : style === 'steel' ? '#7b828a' : k % 2 ? '#a8703f' : '#9a6436';
-      (style === 'steel' ? metal : props).addMatrix(new THREE.BoxGeometry(hw * 2 + 0.1, 0.16, ((p.s1 - p.s0) / n) * 0.92), M, c, 0.08);
+      const c = style === 'stone' ? (k % 2 ? '#f2ece0' : '#e6dece') : style === 'steel' ? '#7b828a' : k % 2 ? '#d8b088' : '#c8a07a';
+      (style === 'steel' ? metal : style === 'stone' ? K.stone : K.planks).addMatrix(new THREE.BoxGeometry(hw * 2 + 0.1, 0.16, ((p.s1 - p.s0) / n) * 0.92), M, c, 0.08);
     }
   };
 
@@ -737,7 +672,7 @@ export function buildCrossing(seg, world, prevSeg) {
       for (const side of [-1, 1]) {
         alongFrame(track, s, side * (hw + 0.1), y, M);
         const post = style === 'stone' ? new THREE.BoxGeometry(0.3, 1.0, 0.3) : new THREE.CylinderGeometry(0.06, 0.07, 1.15, 6);
-        (style === 'steel' ? metal : props).addMatrix(post, M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.55, 0)), style === 'stone' ? '#d7cdbb' : style === 'steel' ? '#e0b030' : '#6a4a30', 0.05);
+        (style === 'steel' ? metal : style === 'stone' ? K.stone : K.planks).addMatrix(post, M.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.55, 0)), style === 'stone' ? '#d7cdbb' : style === 'steel' ? '#e0b030' : '#6a4a30', 0.05);
       }
     }
     const ss = sampleS(s0, s1, 2);
@@ -751,7 +686,7 @@ export function buildCrossing(seg, world, prevSeg) {
         const pitch = Math.atan2(yb - ya, b - a);
         M.multiply(new THREE.Matrix4().makeRotationX(pitch));
         const thick = style === 'stone' ? 0.22 : 0.06;
-        (style === 'steel' ? metal : props).addMatrix(new THREE.BoxGeometry(thick, thick, b - a + 0.05), M, style === 'stone' ? '#e3dac9' : style === 'steel' ? '#e0b030' : '#c9b58a', 0.02);
+        (style === 'steel' ? metal : style === 'stone' ? K.stone : props).addMatrix(new THREE.BoxGeometry(thick, thick, b - a + 0.05), M, style === 'stone' ? '#f4eee2' : style === 'steel' ? '#e0b030' : '#c9b58a', 0.02);
       }
     }
   };
@@ -773,7 +708,7 @@ export function buildCrossing(seg, world, prevSeg) {
         if (!g) continue;
         for (const side of [-1, 1]) {
           alongFrame(track, s, side * hw * 0.8, g.h - 5, M);
-          (style === 'steel' ? metal : props).addMatrix(new THREE.BoxGeometry(0.5, 10, 0.5), M, style === 'stone' ? '#bdb2a0' : style === 'steel' ? '#7b828a' : '#6a4a30', 0.05);
+          (style === 'steel' ? metal : style === 'stone' ? K.stone : K.planks).addMatrix(new THREE.BoxGeometry(0.5, 10, 0.5), M, style === 'stone' ? '#e6dece' : style === 'steel' ? '#7b828a' : '#9a7a5a', 0.05);
         }
       }
       if (seg.type === 'broken') {
@@ -852,5 +787,5 @@ export function buildCrossing(seg, world, prevSeg) {
       break;
   }
 
-  return { props: props.build(), metal: metal.build(), glow: glow.build(), terrain: terrain.build(), water, collapse };
+  return { ...K.build(), water, collapse };
 }

@@ -97,7 +97,7 @@ export function Grass({ count }) {
       tmp.scale.set(b.sc, b.sc * (0.8 + b.shade * 0.6), b.sc);
       tmp.updateMatrix();
       mesh.setMatrixAt(i, tmp.matrix);
-      col.set(seg.stage === 2 ? '#9be476' : '#7fc257').offsetHSL((b.shade - 0.5) * 0.06, 0, (b.shade - 0.5) * 0.12);
+      col.set(seg.stage === 2 ? '#7cc858' : '#5c9e38').offsetHSL((b.shade - 0.5) * 0.06, 0, (b.shade - 0.5) * 0.12);
       mesh.setColorAt(i, col);
       colorsDirty = true;
     }

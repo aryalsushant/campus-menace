@@ -1,32 +1,69 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 import { useGame } from '../core/store';
 import { runtime } from '../core/runtime';
 import { buildSection, buildCrossing } from './campus';
-import { materials } from './materials';
+import { materials, pbr, texSet } from './materials';
+import { foliageMaterial, foliageDepthMaterial } from './foliage';
 
-function Mesh({ geo, mat, shadows = true, receive = true }) {
-  if (!geo) return null;
-  return <mesh geometry={geo} material={mat} castShadow={shadows} receiveShadow={receive} />;
+// Which material each kit layer renders with.
+let MATS = null;
+function kitMaterials() {
+  if (MATS) return MATS;
+  const m = materials();
+  const T = texSet('path');
+  MATS = {
+    path: new THREE.MeshStandardMaterial({ color: new THREE.Color(2.1, 1.85, 1.7), map: T.diff, normalMap: T.nor, roughnessMap: T.rough, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 1 }),
+    brick: pbr('brick', { scale: 1 / 1.25, normal: 1.3 }),
+    plaster: pbr('plaster', { scale: 0.6, normal: 0.4, rough: 0.8 }),
+    stone: pbr('sandstone', { scale: 1 / 1.6, normal: 0.9 }),
+    slate: pbr('slate', { scale: 1 / 1.4, normal: 1.1 }),
+    concrete: pbr('concrete', { scale: 1 / 2, normal: 0.7 }),
+    grass: pbr('grass', { scale: 1 / 2.2, normal: 0.6 }),
+    earth: pbr('mud', { scale: 1 / 5, normal: 0.9 }),
+    bark: pbr('bark', { scale: 1 / 1.1, normal: 1.4 }),
+    planks: pbr('planks', { scale: 1 / 1.1, normal: 1 }),
+    marble: pbr('marble', { scale: 1 / 2, rough: 0.5 }),
+    bronze: new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.35 }),
+    leaf: m.leaf,
+    metal: m.metal,
+    props: m.props,
+    glow: m.glow,
+    windows: m.windows,
+    water: m.water,
+    spray: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    cards: foliageMaterial(),
+  };
+  return MATS;
+}
+
+const NO_SHADOW = new Set(['glow', 'windows', 'water', 'spray', 'path', 'grass', 'earth', 'concrete']);
+const NO_RECEIVE = new Set(['glow', 'windows', 'spray']);
+
+function Layers({ g }) {
+  const M = kitMaterials();
+  return Object.entries(g).map(([k, geo]) => {
+    if (!geo || !M[k] || !geo.isBufferGeometry) return null;
+    return (
+      <mesh
+        key={k}
+        geometry={geo}
+        material={M[k]}
+        castShadow={!NO_SHADOW.has(k)}
+        receiveShadow={!NO_RECEIVE.has(k)}
+        customDepthMaterial={k === 'cards' ? foliageDepthMaterial() : undefined}
+      />
+    );
+  });
 }
 
 const Section = memo(function Section({ seg }) {
-  const m = materials();
   const g = useMemo(() => buildSection(seg, runtime.world.track), [seg]);
   useEffect(() => () => Object.values(g).forEach(x => x && x.dispose && x.dispose()), [g]);
   return (
     <group>
-      <Mesh geo={g.path} mat={m.path} shadows={false} />
-      <Mesh geo={g.lawn} mat={m.lawn} shadows={false} />
-      <Mesh geo={g.terrain} mat={m.terrain} shadows={false} />
-      <Mesh geo={g.props} mat={m.props} />
-      <Mesh geo={g.metal} mat={m.metal} />
-      <Mesh geo={g.canopy} mat={m.canopy} />
-      <Mesh geo={g.glow} mat={m.glow} shadows={false} receive={false} />
-      <Mesh geo={g.windows} mat={m.windows} shadows={false} receive={false} />
-      <Mesh geo={g.brick} mat={m.brick} />
-      <Mesh geo={g.roof} mat={m.roof} />
-      <Mesh geo={g.leaf} mat={m.leaf} />
+      <Layers g={g} />
     </group>
   );
 });
@@ -34,8 +71,6 @@ const Section = memo(function Section({ seg }) {
 function CollapsePlank({ geo, center, padId }) {
   const ref = useRef();
   const st = useRef({ fall: 0, vy: 0, spin: (Math.random() - 0.5) * 2 });
-  // geometry is built around the origin; the mesh sits at `center`
-  const local = geo;
   useFrame((_, dt) => {
     const pad = runtime.world.surfaces.pads.find(p => p.id === padId);
     const o = ref.current;
@@ -54,27 +89,23 @@ function CollapsePlank({ geo, center, padId }) {
       o.position.set(center.x + Math.sin(t * 70) * 0.04 * k, center.y - k * 0.08, center.z);
     } else o.position.set(center.x, center.y, center.z);
   });
-  return <mesh ref={ref} geometry={local} material={materials().props} castShadow receiveShadow />;
+  return <mesh ref={ref} geometry={geo} material={kitMaterials().planks} castShadow receiveShadow />;
 }
 
 const Crossing = memo(function Crossing({ seg, prev }) {
-  const m = materials();
   const g = useMemo(() => buildCrossing(seg, runtime.world, prev), [seg, prev]);
   useEffect(
     () => () => {
-      for (const k of ['props', 'metal', 'glow', 'terrain', 'water']) g[k] && g[k].dispose();
+      for (const v of Object.values(g)) if (v && v.dispose) v.dispose();
       g.collapse.forEach(c => c.geo.dispose());
     },
     [g]
   );
+  const { collapse, ...layers } = g;
   return (
     <group>
-      <Mesh geo={g.props} mat={m.props} />
-      <Mesh geo={g.metal} mat={m.metal} />
-      <Mesh geo={g.terrain} mat={m.terrain} shadows={false} />
-      <Mesh geo={g.glow} mat={m.glow} shadows={false} receive={false} />
-      {g.water && <mesh geometry={g.water} material={m.water} />}
-      {g.collapse.map(c => (
+      <Layers g={layers} />
+      {collapse.map(c => (
         <CollapsePlank key={c.padId} geo={c.geo} center={c.center} padId={c.padId} />
       ))}
     </group>
@@ -86,4 +117,3 @@ export default function Segments() {
   const segs = runtime.world ? runtime.world.segments : [];
   return segs.map((seg, i) => (seg.kind === 'section' ? <Section key={seg.id} seg={seg} /> : <Crossing key={seg.id} seg={seg} prev={segs[i - 1]} />));
 }
-
