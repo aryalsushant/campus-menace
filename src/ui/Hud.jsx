@@ -112,6 +112,8 @@ function Callouts() {
       on('shieldBreak', live(() => push('SHIELD SAVED YOU', 'is-power'))),
       on('powerup', live(e => push({ magnet: 'PIZZA MAGNET', coffee: 'COLD BREW', hoodie: 'HOODIE SHIELD', sixpack: 'SIX-PACK' }[e.kind], 'is-power'))),
       on('stage', live(e => push(STAGES[e.stage].name.toUpperCase(), 'is-stage'))),
+      on('golden', live(() => push('GOLDEN SLICE', 'is-combo', '+5 🍕'))),
+      on('passedBest', live(() => push('NEW RECORD!', 'is-stage', 'keep going…'))),
     ];
     return () => offs.forEach(f => f());
   }, []);

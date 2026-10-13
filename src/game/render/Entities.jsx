@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
+import { emit } from '../core/bus';
 import { useGame } from '../core/store';
 import { withRim } from './materials';
 import { canAssets, pizzaGeometry } from './props';
@@ -567,7 +568,9 @@ export function Pickups() {
   );
 }
 
-const POWER_COLORS = { magnet: '#ff3b5c', coffee: '#c8874a', hoodie: '#6fd3ff', sixpack: '#3dffb0' };
+const POWER_COLORS = { magnet: '#ff3b5c', coffee: '#c8874a', hoodie: '#6fd3ff', sixpack: '#3dffb0', golden: '#ffd23f' };
+const GOLD = new THREE.MeshStandardMaterial({ color: '#ffd23f', metalness: 0.9, roughness: 0.2, emissive: new THREE.Color('#ff9a1a'), emissiveIntensity: 0.6 });
+let goldGeo = null;
 function PowerModel() {
   const m = mats();
   return (
@@ -610,6 +613,9 @@ function PowerModel() {
             <capsuleGeometry args={[0.07, 0.24, 2, 6]} />
           </mesh>
         ))}
+      </group>
+      <group name="golden" scale={1.5}>
+        <mesh geometry={goldGeo || (goldGeo = pizzaGeometry())} material={GOLD} />
       </group>
       <group name="sixpack">
         {[0, 1, 2].map(i =>
@@ -769,5 +775,73 @@ export function AimLine() {
         <meshBasicMaterial color={new THREE.Color('#ff5a4a').multiplyScalar(2)} toneMapped={false} depthTest={false} transparent />
       </mesh>
     </>
+  );
+}
+
+// "YOUR BEST" finish line across the path at your record distance
+export function BestMarker() {
+  const best = useGame(s => (s.stats ? Math.round(s.stats.longest) : 0));
+  const phase = useGame(s => s.phase);
+  const ref = useRef();
+  const fired = useRef(false);
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 96;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1b1230';
+    g.fillRect(0, 0, 512, 96);
+    g.strokeStyle = '#ffd23f';
+    g.lineWidth = 8;
+    g.strokeRect(4, 4, 504, 88);
+    g.fillStyle = '#ffd23f';
+    g.font = '900 54px Arial Black, Impact, sans-serif';
+    g.textAlign = 'center';
+    g.fillText(`YOUR BEST  ${best} m`, 256, 68);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [best]);
+  const signMat = useMemo(() => new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }), [tex]);
+  const tape = useMemo(() => new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd23f').multiplyScalar(2.2), toneMapped: false }), []);
+  const pole = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2a2a2a', roughness: 0.5 }), []);
+  useEffect(() => {
+    fired.current = false;
+  }, [best, phase]);
+  useFrame(state => {
+    const world = runtime.world;
+    const g = ref.current;
+    if (!world || !g) return;
+    const show = runtime.mode === 'play' && best > 50 && world.runner.s < best + 30 && best - world.runner.s < 260;
+    g.visible = show;
+    if (!show) return;
+    const seg = world.segments.find(x => best >= x.s0 && best <= x.s1);
+    const ground = world.surfaces.groundAt(best, 0, 1e9);
+    const w = {};
+    const h = toWorld(best, 0, ground ? ground.h : world.runner.y, w);
+    g.position.set(w.x, w.y, w.z);
+    g.rotation.y = -h;
+    const half = seg && seg.w ? seg.w : 4;
+    g.scale.set(half / 4, 1, 1);
+    g.children[0].material.color.setScalar(1.6 + Math.sin(state.clock.elapsedTime * 6) * 0.6);
+    if (!fired.current && world.runner.s > best) {
+      fired.current = true;
+      emit('passedBest', { best });
+    }
+  });
+  return (
+    <group ref={ref} visible={false}>
+      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} material={tape}>
+        <planeGeometry args={[8, 0.5]} />
+      </mesh>
+      {[-1, 1].map(sd => (
+        <mesh key={sd} position={[sd * 4.4, 2.2, 0]} material={pole}>
+          <cylinderGeometry args={[0.07, 0.07, 4.4, 8]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 4.1, 0]} material={signMat}>
+        <planeGeometry args={[8.8, 1.65]} />
+      </mesh>
+    </group>
   );
 }

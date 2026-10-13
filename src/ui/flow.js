@@ -88,7 +88,7 @@ async function submit(result) {
     const res = await api.finishRun(id, result);
     const cur = getGame().result;
     setGame({ result: { ...(cur || result), ...res, submit: res.status === 'done' ? 'saved' : 'rejected' } });
-    if (res.status === 'done') setGame({ stats: null }); // refresh on next view
+    if (res.status === 'done') api.myStats().then(st => setGame({ stats: st })).catch(() => {});
   } catch (err) {
     const cur = getGame().result;
     setGame({ result: { ...(cur || result), submit: 'failed', error: err.message } });

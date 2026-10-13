@@ -10,7 +10,7 @@ import Atmosphere from './render/Atmosphere';
 import Segments from './render/Segments';
 import Student from './render/Student';
 import Riders from './render/Riders';
-import { Obstacles, VendingMachines, Pickups, Cans, AimLine } from './render/Entities';
+import { Obstacles, VendingMachines, Pickups, Cans, AimLine, BestMarker } from './render/Entities';
 import Particles from './render/Particles';
 import CameraRig from './render/CameraRig';
 import Effects from './render/Effects';
@@ -56,6 +56,7 @@ export default function Game() {
       <Pickups />
       <Cans />
       <AimLine />
+      <BestMarker />
       <Riders />
       <Student />
       <Particles />

@@ -26,6 +26,8 @@ export function wireAudio() {
     on('restock', live(e => e.added > 0 && sfx.restock())),
     on('noCans', live(() => sfx.noCans())),
     on('powerup', live(() => sfx.powerup())),
+    on('golden', live(() => sfx.golden())),
+    on('passedBest', live(() => sfx.record())),
     on('shieldBreak', live(() => sfx.shieldBreak())),
     on('riderSpawn', live(e => e.kind !== 'weaver' && sfx.bell())),
     on('bounce', live(() => sfx.bounce())),

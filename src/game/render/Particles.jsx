@@ -101,6 +101,8 @@ export default function Particles() {
       on('takedown', e => burst('confetti', e.s, e.d, R().y + 1.2, 0.5)),
       on('restock', () => burst('restock', R().s, R().d, R().y + 1)),
       on('powerup', e => burst('power', e.s, e.d, e.y)),
+      on('golden', e => burst('confetti', e.s, e.d, e.y, 0.6)),
+      on('passedBest', () => burst('confetti', R().s + 3, R().d, R().y + 2, 1.4)),
       on('bounce', e => burst('bounce', e.s, e.d, e.y)),
       on('stumble', () => burst('dust', R().s, R().d, R().y, 1.6)),
       on('crumble', () => burst('crumble', R().s, R().d, R().y)),

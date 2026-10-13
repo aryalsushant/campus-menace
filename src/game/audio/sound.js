@@ -136,6 +136,8 @@ export const sfx = {
     noise({ dur: 0.15, vol: 0.15, type: 'lowpass', f: 400 });
     [0, 1, 2].forEach(i => tone({ f: 1046 + i * 262, type: 'triangle', t: 0.12 + i * 0.06, dur: 0.1, vol: 0.1 }));
   },
+  golden: () => [0, 7, 12, 16, 19, 24].forEach((st, i) => tone({ f: 784 * Math.pow(2, st / 12), type: 'triangle', t: i * 0.035, dur: 0.25, vol: 0.09 })),
+  record: () => [0, 4, 7, 12, 7, 12, 16].forEach((st, i) => tone({ f: 523 * Math.pow(2, st / 12), type: 'square', t: i * 0.09, dur: 0.18, vol: 0.06 })),
   noCans: () => tone({ f: 200, type: 'square', dur: 0.1, vol: 0.06 }),
   powerup: () => [0, 4, 7, 11, 14].forEach((s, i) => tone({ f: 660 * Math.pow(2, s / 12), type: 'sine', t: i * 0.04, dur: 0.2, vol: 0.1 })),
   shieldBreak: () => noise({ dur: 0.4, vol: 0.2, type: 'highpass', f: 2500, f2: 800 }),
