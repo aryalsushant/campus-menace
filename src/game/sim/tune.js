@@ -30,10 +30,10 @@ export const RUN = {
 };
 
 // forward speed by distance: 10 m/s at the start, ~24 m/s far in
-export const speedAt = s => 10 + 14 * (1 - Math.exp(-s / 2000));
+export const speedAt = s => 11.5 + 13 * (1 - Math.exp(-s / 1700));
 
 // 0..1 difficulty by distance
-export const difficultyAt = s => Math.min(1, s / 3600);
+export const difficultyAt = s => Math.min(1, s / 2400);
 
 // stages: grounded campus → cracking → sky campus
 export const STAGES = [

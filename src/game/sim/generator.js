@@ -11,36 +11,38 @@ import { RUN, RIDER, speedAt, difficultyAt, stageAt, AIR_SINGLE, AIR_DOUBLE } fr
 // distance at which each beat / crossing type first appears
 const BEAT_UNLOCK = {
   pizzaLine: 0,
-  low1: 45,
-  tallPair: 110,
-  oncoming: 150,
-  lowWall: 220,
-  banner: 320,
-  slalom: 420,
-  weaver: 520,
-  goose: 640,
-  queue: 760,
-  drifter: 880,
-  oncoming2: 1000,
-  robot: 1150,
-  tour: 1350,
-  pack: 1500,
-  combo: 1800,
+  low1: 20,
+  oncoming: 35,
+  tallPair: 60,
+  lowWall: 95,
+  weaver: 140,
+  banner: 160,
+  oncoming2: 220,
+  slalom: 250,
+  drifter: 300,
+  goose: 380,
+  queue: 430,
+  pack: 500,
+  robot: 580,
+  combo: 650,
+  tour: 720,
 };
 const CROSS_UNLOCK = {
   bridge: 0,
-  gap: 260,
-  stones: 560,
-  doubleGap: 900,
-  narrow: 1050,
-  broken: 1300,
-  drop: 1400,
-  collapse: 1550,
+  gap: 140,
+  stones: 340,
+  narrow: 520,
+  doubleGap: 600,
+  broken: 850,
+  drop: 950,
+  collapse: 1050,
   bounce: 2700,
 };
 
 // how much path each beat needs, so nothing spills into the run-up before a crossing
 const BEAT_LEN = { pizzaLine: 8, low1: 6, lowWall: 7, banner: 8, tallPair: 7, slalom: 30, queue: 7, tour: 16, goose: 14, robot: 10, oncoming: 10, oncoming2: 24, weaver: 24, drifter: 14, pack: 16, combo: 22 };
+
+const OBSTACLE_BEATS = new Set(['low1', 'lowWall', 'banner', 'tallPair', 'queue', 'goose', 'robot']);
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -102,7 +104,7 @@ export function createGenerator(seed) {
     const D = difficultyAt(s0);
     const plaza = stage === 0 && !first && rng.chance(0.18);
     const w = first ? 5.4 : plaza ? rng.range(6.6, 7.4) : [rng.range(5, 5.8), rng.range(4.4, 5.2), rng.range(3.9, 4.7)][stage];
-    const len = first ? 150 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
+    const len = first ? 120 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
     const s1 = s0 + len;
     cur = { s0, s1 };
 
@@ -154,13 +156,13 @@ export function createGenerator(seed) {
     }
 
     // beats
-    const clearStart = first ? 30 : 12;
+    const clearStart = first ? 16 : 10;
     const runway = 20;
     let s = s0 + clearStart;
     const end = s1 - runway;
     while (s < end - 6) {
       const v = speedAt(s);
-      const gap = v * lerp(2.4, 1.05, difficultyAt(s));
+      const gap = v * lerp(1.45, 0.72, difficultyAt(s));
       const span = beat(world, s, end, w, yAtS, stage, ramp ? parts[1] : null);
       s += span + gap;
     }
@@ -174,22 +176,22 @@ export function createGenerator(seed) {
     const out = [];
     const D = difficultyAt(s);
     const W = {
-      pizzaLine: lerp(1.6, 0.5, D),
+      pizzaLine: lerp(0.7, 0.25, D),
       low1: 2,
       tallPair: 2,
-      oncoming: 2.6,
-      lowWall: 1.6,
-      banner: 1.5,
+      oncoming: 3.4,
+      lowWall: 1.7,
+      banner: 1.6,
       slalom: 1.4,
-      weaver: 1.6,
+      weaver: 1.9,
       goose: stage === 0 ? 1.2 : 0.6,
       queue: stage === 0 ? 1.2 : 0.5,
-      drifter: 1.4,
-      oncoming2: 1.8,
+      drifter: 1.7,
+      oncoming2: 2.6,
       robot: 1.1,
       tour: stage === 0 ? 1 : 0.4,
-      pack: 1.3,
-      combo: 1.6 * D,
+      pack: 1.7,
+      combo: 0.8 + 2 * D,
     };
     for (const k in W) if (s >= BEAT_UNLOCK[k]) out.push([k, W[k]]);
     return out;
@@ -209,8 +211,14 @@ export function createGenerator(seed) {
     const room = end - s;
     if ((BEAT_LEN[type] || 6) > room) type = 'pizzaLine';
     const make = BEATS[type];
-    const len = make(world, s, Math.max(8, room), w, yAtS, stage);
-    return alone ? len + speedAt(s) * 1.4 : len;
+    let len = make(world, s, Math.max(8, room), w, yAtS, stage);
+    // past the opening, obstacles often come with a rider behind them
+    const D = difficultyAt(s);
+    if (!alone && OBSTACLE_BEATS.has(type) && s > 110 && room > len + 20 && rng.chance(0.18 + 0.45 * D)) {
+      oncoming(world, s + len + rng.range(9, 15), rng.range(-w + 0.8, w - 0.8));
+      len += 10;
+    }
+    return alone ? len + speedAt(s) * 0.9 : len;
   }
 
   const OBST = {
@@ -229,7 +237,7 @@ export function createGenerator(seed) {
 
   // oncoming rider meeting the runner around `meet`
   function oncoming(world, meet, d, opts = {}) {
-    const vr = opts.vr ?? rng.range(lerp(5, 9, difficultyAt(meet)), lerp(6.5, 11, difficultyAt(meet)));
+    const vr = opts.vr ?? rng.range(lerp(6, 9.5, difficultyAt(meet)), lerp(8, 12, difficultyAt(meet)));
     const spawn = Math.min(meet + vr * RIDER.leadTime, opts.maxSpawn ?? cur.s1 - 6);
     addRider(world, { kind: 'oncoming', s: spawn, d, vs: -vr, minS: opts.minS ?? Math.max(cur.s0 + 2, meet - 60), maxS: spawn + 1, amp: opts.amp ?? rng.range(0.1, 0.35), freq: rng.range(0.8, 1.6), ...opts.extra });
   }
@@ -245,7 +253,7 @@ export function createGenerator(seed) {
       return len;
     },
     low1(world, s, room, w, yAtS, stage) {
-      const half = rng.range(0.6, 1.1);
+      const half = rng.range(0.85, 1.35);
       const d = rng.range(-w + half + 0.4, w - half - 0.4);
       addObstacle(world, { kind: 'low', model: rng.pick(OBST[stage].low), s, d, hw: half, hd: 0.45, h: 0.75, y: yAtS(s) });
       // pizza arc over it
@@ -470,17 +478,18 @@ export function createGenerator(seed) {
       }
       case 'stones': {
         // one full jump per stone: pitch ≈ jump reach, stones long enough to land on
-        const n = rng.int(3, 5);
+        // any take-off in the back two thirds of a stone lands on the next one
+        const n = rng.int(3, 4);
         const R = jumpReach(v, 0);
-        const stoneL = Math.max(3.2, R * 0.5);
-        const gapL = Math.max(2.2, R * 0.55);
+        const stoneL = Math.max(3.6, R * 0.75);
+        const gapL = Math.max(2.2, R * 0.35);
         let s = s0;
         let d = 0;
         seg.stones = [];
         for (let i = 0; i < n; i++) {
           s += gapL;
-          d = clamp(d + rng.range(-1.3, 1.3), -1.8, 1.8);
-          pad({ s0: s, s1: s + stoneL, dl: d - 1.3, dr: d + 1.3, y0, y1: y0, kind: 'stone' });
+          d = clamp(d + rng.range(-1, 1), -1.5, 1.5);
+          pad({ s0: s, s1: s + stoneL, dl: d - 1.4, dr: d + 1.4, y0, y1: y0, kind: 'stone' });
           seg.stones.push({ s0: s, s1: s + stoneL, d });
           world.pickups.push({ id: objId++, kind: 'pizza', s: s + stoneL * 0.4, d, y: y0 + 1, taken: false });
           s += stoneL;
