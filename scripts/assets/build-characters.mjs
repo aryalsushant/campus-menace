@@ -4,8 +4,8 @@
 // assets-src/ual (Universal Animation Library). Output: public/assets/characters.
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
-import { prune, dedup, resample, meshopt, textureCompress, weld } from '@gltf-transform/functions';
-import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
+import { prune, dedup, resample, meshopt, textureCompress, weld, simplify } from '@gltf-transform/functions';
+import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import { mkdirSync, statSync } from 'node:fs';
 
@@ -13,6 +13,7 @@ const OUT = 'public/assets/characters';
 mkdirSync(OUT, { recursive: true });
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
+await MeshoptSimplifier.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
 
 const KEEP_ANIMS = [
@@ -77,9 +78,13 @@ async function write(doc, name) {
 
 // ---- bodies: the suit textures are replaced at runtime by a clothing shader,
 // so only the eye textures are kept (small)
-for (const [src, name] of [
-  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf', 'body-m.glb'],
-  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf', 'body-f.glb'],
+// full bodies for the student up close, simplified ones (~1/3 of the
+// triangles) for riders and crowds, where the difference can't be seen
+for (const [src, name, ratio] of [
+  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf', 'body-m.glb', 1],
+  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf', 'body-f.glb', 1],
+  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf', 'body-m-lod.glb', 0.3],
+  ['assets-src/ubc/Base Characters/Godot - UE/Superhero_Female_FullBody.gltf', 'body-f-lod.glb', 0.3],
 ]) {
   const doc = await io.read(src);
   const root = doc.getRoot();
@@ -89,6 +94,7 @@ for (const [src, name] of [
     }
   }
   await doc.transform(weld(), textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [256, 256] }));
+  if (ratio < 1) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.004 }));
   await write(doc, name);
 }
 

@@ -49,7 +49,7 @@ export default function Bystanders({ count = 9 }) {
       if (!live || !group.current) return;
       for (let i = 0; i < count; i++) {
         const look = randomLook(i * 977 + 3);
-        const p = makePerson({ ...look, castShadow: false });
+        const p = makePerson({ ...look, castShadow: false, lod: true });
         p.root.visible = false;
         group.current.add(p.root);
         pool.current.push({ p, spot: null });
@@ -100,7 +100,7 @@ export default function Bystanders({ count = 9 }) {
       const near = Math.abs(spot.s - q.s) < 30;
       if (cheerT.current > 0 && near) p.play('Dance_Loop', { fade: 0.2 });
       else p.play(spot.kind === 'stroll' ? 'Walk_Loop' : 'Idle_Talking_Loop', { fade: 0.3 });
-      p.mixer.update(dt);
+      p.tick(dt, runtime.camera);
     }
   });
   return <group ref={group} />;

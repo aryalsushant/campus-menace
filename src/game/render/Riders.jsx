@@ -57,7 +57,7 @@ function RiderModel({ slot }) {
     loadPeople().then(() => {
       if (!live || !person.current) return;
       const look = randomLook(slot * 7919 + 13);
-      const p = makePerson({ ...look, outfit: { ...look.outfit, rim: '#ffd9b8', rimStrength: 0.35 } });
+      const p = makePerson({ ...look, lod: true, outfit: { ...look.outfit, rim: '#ffd9b8', rimStrength: 0.35 } });
       // both hands low and forward: texting while riding
       p.play('Pistol_Aim_Down');
       const hand = bindPosition(p, 'hand_r');
@@ -176,7 +176,7 @@ export default function Riders() {
       if (P) {
         if (rd.state === 'down') P.play('Death01', { loop: false, timeScale: 1.4, fade: 0.05 });
         else P.play('Pistol_Aim_Down', { fade: 0.1 });
-        P.mixer.update(dt);
+        P.tick(dt, state.camera);
       }
       if (rd.state === 'down' && D) {
         D.t += dt;

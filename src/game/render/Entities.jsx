@@ -501,7 +501,7 @@ function RiggedPerson({ o }) {
     loadPeople().then(() => {
       if (!live || !ref.current) return;
       const look = randomLook((o.seed || o.id) * 31 + 7);
-      const p = makePerson({ ...look, castShadow: true });
+      const p = makePerson({ ...look, castShadow: true, lod: true });
       p.play(o.model === 'tourist' ? 'Walk_Loop' : 'Idle_Talking_Loop', { timeScale: 0.8 + ((o.seed || 1) % 5) * 0.08 });
       p.mixer.update(((o.seed || 1) % 17) * 0.13);
       ref.current.add(p.root);
@@ -515,7 +515,7 @@ function RiggedPerson({ o }) {
     const p = P.current;
     if (!p) return;
     if (o.hit) p.play('Hit_Chest', { loop: false, fade: 0.05 });
-    p.mixer.update(Math.min(dt, 0.05));
+    p.tick(Math.min(dt, 0.05), runtime.camera);
   });
   return <group ref={ref} />;
 }

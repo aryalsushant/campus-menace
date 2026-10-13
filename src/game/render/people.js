@@ -20,7 +20,7 @@ export function loadPeople() {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const load = f => new Promise((res, rej) => loader.load(BASE + f, res, undefined, rej));
-  loading = Promise.all([load('body-m.glb'), load('body-f.glb'), load('hair.glb'), load('anims.glb')]).then(([m, f, hair, anims]) => {
+  loading = Promise.all([load('body-m.glb'), load('body-f.glb'), load('hair.glb'), load('anims.glb'), load('body-m-lod.glb'), load('body-f-lod.glb')]).then(([m, f, hair, anims, mLod, fLod]) => {
     // node names carry the style; meshes may be nested under them
     const hairMeshes = {};
     // bake each node's transform (exports carry unit scale) into its geometry
@@ -44,7 +44,7 @@ export function loadPeople() {
     });
     const clips = {};
     for (const c of anims.animations) clips[c.name] = c;
-    assets = { bodies: { m: m.scene, f: f.scene }, hair: hairMeshes, clips, split: splitClips(clips) };
+    assets = { bodies: { m: m.scene, f: f.scene }, lod: { m: mLod.scene, f: fLod.scene }, hair: hairMeshes, clips, split: splitClips(clips) };
     return assets;
   });
   return loading;
@@ -148,15 +148,17 @@ export function attach(person, boneName, object, { pos = [0, 0, 0], rot = [0, 0,
   bone.add(object);
 }
 
-export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hairColor = '#2a1a12', brows = true, castShadow = true }) {
+export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hairColor = '#2a1a12', brows = true, castShadow = true, lod = false }) {
   const A = assets;
   const root = new THREE.Group();
-  const body = cloneSkinned(A.bodies[sex]);
+  // crowds and riders use the simplified body (~1/3 of the triangles)
+  const body = cloneSkinned((lod ? A.lod : A.bodies)[sex]);
   // source faces +z; the game faces -z
   body.rotation.y = Math.PI;
   root.add(body);
   const bones = {};
   let mainMesh = null;
+  const skinned = [];
   body.traverse(o => {
     if (o.isBone) bones[o.name] = o;
     if (o.isSkinnedMesh) {
@@ -166,14 +168,16 @@ export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hair
       o.frustumCulled = true;
       o.castShadow = castShadow;
       o.receiveShadow = false;
-      if (/Superhero|Sphere/.test(o.name) || o.geometry.attributes.position.count > 4000) mainMesh = o;
-      else if (o.material) {
+      skinned.push(o);
+      if (o.material) {
         // eyes and brows: keep the textured eyes, darken brows to the hair colour
         o.material = o.material.clone();
         if (/brow/i.test(o.name) || /Face$/.test(o.name)) o.material.color = new THREE.Color(hairColor);
       }
     }
   });
+  // the body is the biggest skinned mesh; the rest are eyes and brows
+  for (const o of skinned) if (!mainMesh || o.geometry.attributes.position.count > mainMesh.geometry.attributes.position.count) mainMesh = o;
   // bind pose, measured in character space (the body's own frame) before any
   // animation runs; the source armature is Z-up, so raw vertex data isn't
   body.updateMatrixWorld(true);
@@ -227,6 +231,22 @@ export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hair
     for (const L of ['upper', 'lower']) if (state[L] === name) layers[L][name].timeScale = ts;
   };
   person.current = state;
+  // animate near people every frame, mid-range every 2nd, far every 3rd
+  let pending = 0;
+  let frame = 0;
+  const _w = new THREE.Vector3();
+  person.tick = (dt, camera) => {
+    pending += dt;
+    frame++;
+    let every = 1;
+    if (camera) {
+      const d = root.getWorldPosition(_w).distanceTo(camera.position);
+      every = d < 22 ? 1 : d < 55 ? 2 : 3;
+    }
+    if (frame % every !== 0) return;
+    mixer.update(Math.min(pending, 0.15));
+    pending = 0;
+  };
   person.action = (layer, name) => layers[layer][name];
   return person;
 }
