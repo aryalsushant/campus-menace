@@ -13,12 +13,19 @@ export default function Hud() {
   const score = useGame(s => s.score);
   const cans = useGame(s => s.cans);
   const combo = useGame(s => s.combo);
-  const distance = useGame(s => s.distance);
   const power = useGame(s => s.power);
   const shaken = useGame(s => s.shaken);
   const touch = useGame(s => s.touch);
   const runCount = useGame(s => s.runCount);
   const [bump, setBump] = useState(0);
+  const distRef = useRef();
+  useEffect(() => {
+    runtime.distEl = distRef.current;
+    runtime.distShown = -1;
+    return () => {
+      if (runtime.distEl === distRef.current) runtime.distEl = null;
+    };
+  }, []);
   useEffect(() => on('pizza', () => setBump(b => b + 1)), []);
   const unlimited = power.sixpack > 0;
 
@@ -31,7 +38,7 @@ export default function Hud() {
           <button className="cm-icon-btn" aria-label="Pause" onClick={togglePause}>
             ❚❚
           </button>
-          <span className="cm-distance">{distance} m</span>
+          <span className="cm-distance" ref={distRef} />
         </div>
         <div className="cm-score-wrap">
           <motion.div key={bump} className="cm-score" initial={{ scale: 1.18 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}>

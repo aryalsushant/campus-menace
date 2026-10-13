@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+
+// per-frame scratch
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _lead = new THREE.Vector3();
 import { runtime } from '../core/runtime';
 import { on } from '../core/bus';
 import { SKY } from './Atmosphere';
@@ -220,11 +225,10 @@ function BannerPlane() {
       mats.banner.map = textures[S.i];
       mats.banner.needsUpdate = true;
       // fly across ahead of the camera, left to right or right to left
-      const fwd = new THREE.Vector3();
-      camera.getWorldDirection(fwd);
+      const fwd = camera.getWorldDirection(_fwd);
       fwd.y = 0;
       fwd.normalize();
-      const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+      const right = _right.set(-fwd.z, 0, fwd.x);
       const side = Math.random() < 0.5 ? -1 : 1;
       S.from.copy(camera.position).addScaledVector(fwd, rand(140, 200)).addScaledVector(right, side * 260);
       S.from.y = camera.position.y + rand(45, 65);
@@ -306,8 +310,8 @@ function Flocks({ birds = 42 }) {
       S.t = 0;
       return;
     }
-    const lead = S.from.clone().addScaledVector(S.dir, k * 440);
-    const right = new THREE.Vector3(-S.dir.z, 0, S.dir.x);
+    const lead = _lead.copy(S.from).addScaledVector(S.dir, k * 440);
+    const right = _right.set(-S.dir.z, 0, S.dir.x);
     const yaw = Math.atan2(-S.dir.x, -S.dir.z);
     let i = 0;
     for (let b = 0; b < S.n && i < birds; b++, i++) {
@@ -395,7 +399,7 @@ function ShootingStars() {
       return;
     }
     m.position.copy(S.from).addScaledVector(S.dir, k * 160);
-    m.lookAt(m.position.clone().add(S.dir));
+    m.lookAt(_lead.copy(m.position).add(S.dir));
     mat.opacity = Math.sin(k * Math.PI);
   });
   return (

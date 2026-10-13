@@ -52,7 +52,6 @@ export function startWorld(mode, seed) {
     cans: runtime.world.canCount,
     combo: 0,
     stage: 0,
-    distance: 0,
     power: { ...runtime.world.power },
     shaken: false,
     segVersion: getGame().segVersion + 1,
@@ -122,8 +121,12 @@ function mirror(w) {
   if (g.cans !== w.canCount) patch.cans = w.canCount;
   if (g.combo !== w.combo) patch.combo = w.combo;
   if (g.stage !== w.stage) patch.stage = w.stage;
+  // the distance counter is written straight to the DOM, no React render
   const dist = Math.floor(w.runner.s);
-  if (Math.abs(g.distance - dist) >= 5) patch.distance = dist;
+  if (runtime.distEl && runtime.distShown !== dist) {
+    runtime.distShown = dist;
+    runtime.distEl.textContent = `${dist} m`;
+  }
   const shaken = w.runner.shakenT > 0;
   if (g.shaken !== shaken) patch.shaken = shaken;
   const P = w.power;

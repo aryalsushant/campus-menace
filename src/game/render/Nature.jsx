@@ -1,6 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+
+const _fwd = new THREE.Vector3();
 import { runtime, runnerLerp, toWorld } from '../core/runtime';
 import { shared } from './materials';
 import { sectionHeight } from './campus';
@@ -128,8 +130,7 @@ export function Leaves({ count = 90 }) {
     const on = world.stage === 0;
     mesh.visible = on;
     if (!on) return;
-    const fwd = new THREE.Vector3();
-    camera.getWorldDirection(fwd);
+    const fwd = camera.getWorldDirection(_fwd);
     for (let i = 0; i < leaves.length; i++) {
       const L = leaves[i];
       L.age += dt;

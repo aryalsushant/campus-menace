@@ -26,7 +26,6 @@ export const useGame = create(set => ({
   cans: 5,
   combo: 0,
   stage: 0,
-  distance: 0,
   power: { magnet: 0, coffee: 0, hoodie: false, sixpack: 0 },
   shaken: false,
   result: null,
