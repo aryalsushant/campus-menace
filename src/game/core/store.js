@@ -1,0 +1,53 @@
+import { create } from 'zustand';
+
+const read = (k, fallback) => {
+  try {
+    const v = localStorage.getItem(`cm:${k}`);
+    return v == null ? fallback : JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+};
+const write = (k, v) => {
+  try {
+    localStorage.setItem(`cm:${k}`, JSON.stringify(v));
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+// UI-facing state. The simulation itself lives in `runtime` (mutable, per
+// frame); only values the DOM shows are mirrored here, and only on change.
+export const useGame = create(set => ({
+  // 'landing' (attract run + sign in) | 'ready' | 'playing' | 'over'
+  phase: 'landing',
+  paused: false,
+  score: 0,
+  cans: 5,
+  combo: 0,
+  stage: 0,
+  distance: 0,
+  power: { magnet: 0, coffee: 0, hoodie: false, sixpack: 0 },
+  shaken: false,
+  result: null,
+  touch: false,
+  tier: 'high',
+  quality: read('quality', 'auto'),
+  muted: read('muted', false),
+  tiltSensitivity: read('tilt', 1),
+  steerMode: read('steerMode', 'tilt'), // phones: 'tilt' | 'drag'
+  segVersion: 0,
+  objVersion: 0,
+  set,
+}));
+
+export const setGame = patch => useGame.setState(patch);
+export const getGame = () => useGame.getState();
+
+export function setPersisted(patch) {
+  for (const [k, v] of Object.entries(patch)) {
+    const key = { quality: 'quality', muted: 'muted', tiltSensitivity: 'tilt', steerMode: 'steerMode' }[k];
+    if (key) write(key, v);
+  }
+  useGame.setState(patch);
+}
