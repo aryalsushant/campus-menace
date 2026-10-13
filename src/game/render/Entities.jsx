@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
 import { emit } from '../core/bus';
 import { useGame } from '../core/store';
-import { withRim } from './materials';
+import { withRim, pbr } from './materials';
+import { loadPeople, makePerson, randomLook } from './people';
 import { canAssets, pizzaGeometry } from './props';
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, flatShading: true, ...o });
@@ -16,6 +17,14 @@ function mats() {
   if (M) return M;
   M = {
     yellow: std('#ffd23f'),
+    planks: pbr('planks', { scale: 1 / 0.9, vertexColors: false }),
+    brick: pbr('brick', { scale: 1 / 1.25, normal: 1.3, vertexColors: false }),
+    stone: pbr('sandstone', { scale: 1 / 1.6, vertexColors: false }),
+    flower2: std('#ffffff'),
+    screen: glow('#7fd4ff', 1.6),
+    blueGlow: glow('#3d8fe8', 1.8),
+    recycle: signMaterial(['♻ RECYCLE', 'CANS · BOTTLES', 'PAPER'], '#1f6f4a', '#ffffff'),
+    wayfinding: signMaterial(['← LIBRARY', '→ STUDENT UNION', '↑ STADIUM'], '#1d1d20', '#f4e3a8'),
     black: std('#1d1d22'),
     white: std('#f4f6f8', { flatShading: false, roughness: 0.35 }),
     orange: std('#ff7a2a'),
@@ -48,31 +57,6 @@ function mats() {
 }
 
 // ------------------------------------------------------------------ models
-function Person({ shirt, guide }) {
-  const m = mats();
-  return (
-    <group>
-      {[-0.1, 0.1].map(x => (
-        <mesh key={x} position={[x, 0.42, 0]} material={m.pants} castShadow>
-          <capsuleGeometry args={[0.08, 0.66, 3, 6]} />
-        </mesh>
-      ))}
-      <RoundedBox args={[0.46, 0.6, 0.3]} radius={0.09} position={[0, 1.12, 0]} material={shirt} castShadow />
-      <RoundedBox args={[0.36, 0.38, 0.36]} radius={0.13} position={[0, 1.62, 0]} material={m.skin} castShadow />
-      {guide && (
-        <>
-          <mesh position={[0.3, 1.9, 0]} material={m.dark}>
-            <cylinderGeometry args={[0.015, 0.015, 1.3, 4]} />
-          </mesh>
-          <mesh position={[0.48, 2.45, 0]} material={m.flag}>
-            <boxGeometry args={[0.36, 0.24, 0.02]} />
-          </mesh>
-        </>
-      )}
-    </group>
-  );
-}
-
 function ObstacleModel({ o }) {
   const m = mats();
   const w2 = o.hw * 2;
@@ -161,29 +145,33 @@ function ObstacleModel({ o }) {
       return o.kind === 'tall' ? (
         <group>
           {[0.45, 1.25, 2.05].map((y, i) => (
-            <mesh key={y} position={[0, y, 0]} rotation={[0, i * 0.3, 0]} material={m.wood} castShadow>
+            <mesh key={y} position={[0, y, 0]} rotation={[0, i * 0.3, 0]} material={m.planks} castShadow>
               <boxGeometry args={[Math.min(1.1, w2), 0.78, 0.8]} />
             </mesh>
           ))}
         </group>
       ) : (
-        <mesh position={[0, 0.38, 0]} material={m.wood} castShadow>
+        <mesh position={[0, 0.38, 0]} material={m.planks} castShadow>
           <boxGeometry args={[w2, 0.76, 0.8]} />
         </mesh>
       );
     case 'hedgeRow':
     case 'planterRow':
+      // brick planter with clipped boxwood and blooms
       return (
         <group>
-          <mesh position={[0, 0.2, 0]} material={o.model === 'planterRow' ? m.concrete : m.wood} castShadow>
-            <boxGeometry args={[w2, 0.4, 0.8]} />
+          <mesh position={[0, 0.25, 0]} material={o.model === 'planterRow' ? m.stone : m.brick} castShadow receiveShadow>
+            <boxGeometry args={[w2, 0.5, 0.85]} />
           </mesh>
-          <mesh position={[0, 0.6, 0]} material={m.hedge} castShadow>
-            <boxGeometry args={[w2 - 0.1, 0.45, 0.7]} />
+          <mesh position={[0, 0.52, 0]} material={m.stone}>
+            <boxGeometry args={[w2 + 0.06, 0.06, 0.92]} />
           </mesh>
-          {Array.from({ length: Math.round(w2 / 0.9) }, (_, i) => (
-            <mesh key={i} position={[-w2 / 2 + 0.45 + i * 0.9, 0.86, 0]} material={m.flower}>
-              <icosahedronGeometry args={[0.1, 0]} />
+          <mesh position={[0, 0.72, 0]} material={m.hedge} castShadow>
+            <boxGeometry args={[w2 - 0.12, 0.36, 0.68]} />
+          </mesh>
+          {Array.from({ length: Math.round(w2 / 0.55) }, (_, i) => (
+            <mesh key={i} position={[-w2 / 2 + 0.3 + i * 0.55, 0.92, (i % 2) * 0.16 - 0.08]} material={i % 3 ? m.flower : m.flower2}>
+              <icosahedronGeometry args={[0.09, 1]} />
             </mesh>
           ))}
         </group>
@@ -191,84 +179,109 @@ function ObstacleModel({ o }) {
     case 'clubBanner':
     case 'beam': {
       const beam = o.model === 'beam';
-      const bm = m.banner[o.id % 4];
       return (
         <group>
-          {[-1, 1].map(s => (
-            <mesh key={s} position={[(s * w2) / 2, 1.4, 0]} material={beam ? m.yellow : m.dark} castShadow>
-              <boxGeometry args={[0.16, 2.8, 0.16]} />
+          {[-1, 1].map(sd => (
+            <mesh key={sd} position={[(sd * w2) / 2, 1.5, 0]} material={beam ? m.yellow : m.dark} castShadow>
+              <cylinderGeometry args={[0.07, 0.08, 3, 10]} />
             </mesh>
           ))}
-          <mesh position={[0, o.clear + 0.5, 0]} material={beam ? m.yellow : bm} castShadow>
-            <boxGeometry args={[w2, beam ? 0.4 : 0.95, beam ? 0.4 : 0.05]} />
-          </mesh>
           {beam ? (
-            <mesh position={[0, o.clear + 0.5, -0.21]} material={m.black}>
-              <boxGeometry args={[w2 * 0.98, 0.12, 0.01]} />
-            </mesh>
+            <>
+              <mesh position={[0, o.clear + 0.5, 0]} material={m.yellow} castShadow>
+                <boxGeometry args={[w2, 0.4, 0.4]} />
+              </mesh>
+              <mesh position={[0, o.clear + 0.5, -0.21]} material={m.black}>
+                <boxGeometry args={[w2 * 0.98, 0.12, 0.01]} />
+              </mesh>
+            </>
           ) : (
-            <mesh position={[0, o.clear + 0.5, -0.03]} material={m.white}>
-              <boxGeometry args={[w2 * 0.6, 0.18, 0.01]} />
+            <mesh position={[0, o.clear + 0.5, 0]} material={clubBannerMaterial(o.id)} castShadow>
+              <boxGeometry args={[w2, 0.95, 0.04]} />
             </mesh>
           )}
         </group>
       );
     }
     case 'lamp':
+      // black acorn lamp post
       return (
         <group>
-          <mesh position={[0, 0.2, 0]} material={m.dark} castShadow>
-            <cylinderGeometry args={[0.26, 0.32, 0.4, 8]} />
+          <mesh position={[0, 0.25, 0]} material={m.dark} castShadow>
+            <cylinderGeometry args={[0.22, 0.28, 0.5, 12]} />
           </mesh>
-          <mesh position={[0, 1.8, 0]} material={m.dark} castShadow>
-            <cylinderGeometry args={[0.09, 0.11, 3.4, 8]} />
+          <mesh position={[0, 2.1, 0]} material={m.dark} castShadow>
+            <cylinderGeometry args={[0.08, 0.11, 3.4, 12]} />
           </mesh>
-          <mesh position={[0, 3.6, 0]} material={m.lampGlow}>
-            <sphereGeometry args={[0.22, 10, 8]} />
+          <mesh position={[0, 4.25, 0]} material={m.lampGlow}>
+            <sphereGeometry args={[0.27, 14, 10]} />
+          </mesh>
+          <mesh position={[0, 4.62, 0]} material={m.dark}>
+            <coneGeometry args={[0.13, 0.26, 12]} />
           </mesh>
         </group>
       );
     case 'bikeRack':
+      // bike-share dock: a tall kiosk sign and bikes parked in hoops
       return (
         <group>
-          <mesh position={[0, 1.1, 0]} material={m.blue} castShadow>
-            <boxGeometry args={[Math.min(1.2, w2), 2.2, 0.35]} />
+          <mesh position={[0, 1.25, 0]} material={m.dark} castShadow>
+            <boxGeometry args={[0.5, 2.5, 0.3]} />
           </mesh>
-          <mesh position={[0, 1.6, -0.18]} material={m.white}>
-            <boxGeometry args={[0.7, 0.5, 0.02]} />
+          <mesh position={[0, 1.9, -0.16]} material={m.screen}>
+            <boxGeometry args={[0.36, 0.5, 0.01]} />
           </mesh>
+          <mesh position={[0, 2.35, 0]} material={m.blueGlow}>
+            <boxGeometry args={[0.52, 0.18, 0.32]} />
+          </mesh>
+          {[-1, 1].map(sd => (
+            <Bike key={sd} x={sd * Math.min(0.45, w2 * 0.3)} m={m} />
+          ))}
         </group>
       );
     case 'trashcan':
+      // recycling station with a tall sign
       return (
         <group>
-          <mesh position={[0, 1, 0]} material={m.green} castShadow>
-            <cylinderGeometry args={[Math.min(0.55, o.hw), Math.min(0.5, o.hw), 2, 10]} />
+          {[-0.3, 0.3].map((x, i) => (
+            <mesh key={x} position={[x, 0.5, 0]} material={i ? m.blue : m.green} castShadow>
+              <cylinderGeometry args={[0.28, 0.25, 1, 14]} />
+            </mesh>
+          ))}
+          <mesh position={[0, 1.6, 0.1]} material={m.dark}>
+            <boxGeometry args={[0.08, 2.4, 0.08]} />
           </mesh>
-          <mesh position={[0, 2.05, 0]} material={m.dark}>
-            <cylinderGeometry args={[Math.min(0.6, o.hw + 0.05), Math.min(0.6, o.hw + 0.05), 0.12, 10]} />
+          <mesh position={[0, 2.35, 0.08]} material={m.recycle} castShadow>
+            <boxGeometry args={[0.9, 0.5, 0.05]} />
           </mesh>
         </group>
       );
     case 'sign':
+      // campus wayfinding sign
       return (
         <group>
-          <mesh position={[0, 1.2, 0]} material={m.dark}>
-            <boxGeometry args={[0.1, 2.4, 0.1]} />
-          </mesh>
-          <mesh position={[0, 1.8, -0.06]} material={m.white} castShadow>
-            <boxGeometry args={[Math.min(1.2, w2), 0.9, 0.06]} />
+          {[-0.45, 0.45].map(x => (
+            <mesh key={x} position={[x * Math.min(1, w2 / 1.2), 1.2, 0]} material={m.dark}>
+              <boxGeometry args={[0.08, 2.4, 0.08]} />
+            </mesh>
+          ))}
+          <mesh position={[0, 1.8, 0]} material={m.wayfinding} castShadow>
+            <boxGeometry args={[Math.min(1.3, w2), 1.1, 0.06]} />
           </mesh>
         </group>
       );
     case 'portapotty':
       return (
-        <RoundedBox args={[Math.min(1.2, w2), 2.3, 1.1]} radius={0.06} position={[0, 1.15, 0]} material={m.blue} castShadow />
+        <group>
+          <RoundedBox args={[Math.min(1.2, w2), 2.3, 1.1]} radius={0.06} position={[0, 1.15, 0]} material={m.blue} castShadow />
+          <mesh position={[0, 2.34, 0]} material={m.white}>
+            <boxGeometry args={[Math.min(1.25, w2 + 0.05), 0.1, 1.15]} />
+          </mesh>
+        </group>
       );
     case 'student':
-      return <Person shirt={m.shirts[(o.seed || 0) % m.shirts.length]} />;
     case 'tourist':
-      return <Person shirt={m.shirts[(o.seed || 0) % m.shirts.length]} guide={(o.seed || 0) % 5 === 0} />;
+      return <RiggedPerson o={o} />;
     case 'goose':
       return <Goose o={o} />;
     case 'robot':
@@ -413,6 +426,98 @@ function Goose({ o }) {
       </group>
     </group>
   );
+}
+
+
+// club names on the hanging banners (black and gold)
+const CLUBS = ['CHESS CLUB', 'PRE-MED SOCIETY', 'ROBOTICS', 'DANCE TEAM', 'FILM CLUB', 'HOMECOMING', 'GAME NIGHT', 'FREE PIZZA'];
+const bannerMats = new Map();
+function clubBannerMaterial(id) {
+  const k = id % CLUBS.length;
+  if (bannerMats.has(k)) return bannerMats.get(k);
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 160;
+  const g = c.getContext('2d');
+  const gold = k % 2 === 0;
+  g.fillStyle = gold ? '#d4a82a' : '#1d1d20';
+  g.fillRect(0, 0, 1024, 160);
+  g.strokeStyle = gold ? '#1d1d20' : '#d4a82a';
+  g.lineWidth = 10;
+  g.strokeRect(10, 10, 1004, 140);
+  g.fillStyle = gold ? '#1d1d20' : '#f4e3a8';
+  g.font = '900 92px Arial Black, Impact, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(CLUBS[k], 512, 112);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, emissive: new THREE.Color('#ffffff'), emissiveMap: t, emissiveIntensity: 0.25 });
+  bannerMats.set(k, m);
+  return m;
+}
+
+function signMaterial(lines, bg, fg) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 384;
+  const g = c.getContext('2d');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 512, 384);
+  g.fillStyle = fg;
+  g.font = '800 50px Arial, sans-serif';
+  lines.forEach((l, i) => g.fillText(l, 30, 90 + i * 100));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 });
+}
+
+function Bike({ x, m }) {
+  return (
+    <group position={[x, 0, 0.1]} rotation={[0, Math.PI / 2, 0]}>
+      {[-0.5, 0.5].map(z => (
+        <mesh key={z} position={[0, 0.34, z]} rotation={[0, Math.PI / 2, 0]} material={m.black}>
+          <torusGeometry args={[0.32, 0.03, 8, 20]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.blue}>
+        <cylinderGeometry args={[0.025, 0.025, 1, 6]} />
+      </mesh>
+      <mesh position={[0, 0.85, -0.45]} material={m.black}>
+        <boxGeometry args={[0.5, 0.04, 0.04]} />
+      </mesh>
+      <mesh position={[0, 0.75, 0.3]} material={m.black}>
+        <boxGeometry args={[0.12, 0.05, 0.22]} />
+      </mesh>
+    </group>
+  );
+}
+
+// queue and tour members are rigged people
+function RiggedPerson({ o }) {
+  const ref = useRef();
+  const P = useRef(null);
+  useEffect(() => {
+    let live = true;
+    loadPeople().then(() => {
+      if (!live || !ref.current) return;
+      const look = randomLook((o.seed || o.id) * 31 + 7);
+      const p = makePerson({ ...look, castShadow: true });
+      p.play(o.model === 'tourist' ? 'Walk_Loop' : 'Idle_Talking_Loop', { timeScale: 0.8 + ((o.seed || 1) % 5) * 0.08 });
+      p.mixer.update(((o.seed || 1) % 17) * 0.13);
+      ref.current.add(p.root);
+      P.current = p;
+    });
+    return () => {
+      live = false;
+    };
+  }, [o]);
+  useFrame((_, dt) => {
+    const p = P.current;
+    if (!p) return;
+    if (o.hit) p.play('Hit_Chest', { loop: false, fade: 0.05 });
+    p.mixer.update(Math.min(dt, 0.05));
+  });
+  return <group ref={ref} />;
 }
 
 const Obstacle = memo(function Obstacle({ o }) {
