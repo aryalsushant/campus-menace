@@ -164,6 +164,15 @@ export function foliageMaterial() {
       )
       // leaves light from above, not as flat cards
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.65));');
+    // dissolve foliage right in front of the camera (dithered, no sorting)
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <alphatest_fragment>',
+      `#include <alphatest_fragment>
+      float camDist = length(vViewPosition);
+      float keep = smoothstep(5.0, 11.0, camDist);
+      float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      if (dither > keep) discard;`
+    );
   };
   mat.customProgramCacheKey = () => 'foliage-cards';
   return mat;

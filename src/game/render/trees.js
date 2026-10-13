@@ -48,11 +48,12 @@ export function liveOak(K, x, y, z, rnd, size = 1) {
   for (let i = 0; i < limbs; i++) {
     const a = (i / limbs) * Math.PI * 2 + rnd.range(-0.4, 0.4);
     const reach = rnd.range(4.5, 7.5) * size;
-    const lift = rnd.range(1.2, 3.2) * size;
+    // limbs climb high enough to arch over the walk above the camera
+    const lift = rnd.range(2.8, 4.4) * size;
     const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
     const start = base.clone().add(new THREE.Vector3(0, trunkH * rnd.range(0.75, 1), 0));
     const mid = start.clone().addScaledVector(dir, reach * 0.5).add(new THREE.Vector3(0, lift, 0));
-    const end = start.clone().addScaledVector(dir, reach).add(new THREE.Vector3(0, lift * rnd.range(0.4, 0.9), 0));
+    const end = start.clone().addScaledVector(dir, reach).add(new THREE.Vector3(0, lift * rnd.range(0.75, 1.05), 0));
     const curve = limb(K, [start, mid, end], 0.34 * size, 0.08 * size, bark, 10);
     // leaf clusters along the outer two thirds and over the top
     const clusters = rnd.int(9, 14);
@@ -68,7 +69,7 @@ export function liveOak(K, x, y, z, rnd, size = 1) {
     const moss = rnd.int(2, 4);
     for (let k = 0; k < moss; k++) {
       const p = curve.getPointAt(rnd.range(0.35, 0.9));
-      const h = rnd.range(1.2, 2.4) * size;
+      const h = rnd.range(1.0, 1.8) * size;
       p.y -= h / 2;
       K.cards.cross(p, rnd.range(0.7, 1.1) * size, h, TILE.moss, tint('#a8b090', rnd, 0.2), 0.6, rnd.range(0, 6.28));
     }
