@@ -113,6 +113,7 @@ const Crossing = memo(function Crossing({ g }) {
 export default function Segments() {
   useGame(s => s.segVersion);
   useGame(s => s.chunkVersion);
+  const texReady = useGame(s => s.texReady);
   const world = runtime.world;
   useEffect(() => {
     releaseChunks([runtime.world, runtime.nextWorld]);
@@ -120,8 +121,9 @@ export default function Segments() {
   if (!world) return null;
   const segs = world.segments;
   return segs.map((seg, i) => {
+    // chunks build while the textures load; they draw once both are ready
     const g = requestChunk(world, seg, segs[i - 1]);
-    if (!g) return null;
+    if (!g || !texReady) return null;
     const key = `${world.seed}:${seg.id}`;
     return seg.kind === 'section' ? <Section key={key} g={g} /> : <Crossing key={key} g={g} />;
   });

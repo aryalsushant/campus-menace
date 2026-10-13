@@ -18,6 +18,7 @@ import { Grass, Leaves, Fireflies } from './render/Nature';
 import SkyLife from './render/SkyLife';
 import Bystanders from './render/Bystanders';
 import PerfMeter from './render/PerfMeter';
+import { loadTextures } from './render/materials';
 
 function Driver() {
   useFrame((_, dt) => tick(dt), -50);
@@ -35,6 +36,12 @@ function Warmup() {
     return () => clearTimeout(id);
   }, [gl, scene, camera]);
   return null;
+}
+
+// obstacles and props use the compressed textures, so they mount once those
+// are on the GPU (loading starts with the canvas, during the landing)
+function Textured({ children }) {
+  return useGame(s => s.texReady) ? children : null;
 }
 
 export default function Game() {
@@ -60,6 +67,7 @@ export default function Game() {
       onCreated={({ gl, scene }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.outputColorSpace = THREE.SRGBColorSpace;
+        loadTextures(gl).then(() => setGame({ texReady: true }));
         if (import.meta.env.DEV) window.__cm = { runtime, gl, scene, getGame, setGame, fastForward, startWorld, botPlay: () => { const b = createBot(); runtime.input = () => b.think(runtime.world); } };
       }}
     >
@@ -78,10 +86,12 @@ export default function Game() {
       <Warmup />
       <Atmosphere shadows={T.shadows} shadowSize={T.shadowSize} />
       <Segments />
-      <Obstacles />
-      <VendingMachines />
-      <Pickups />
-      <Cans />
+      <Textured>
+        <Obstacles />
+        <VendingMachines />
+        <Pickups />
+        <Cans />
+      </Textured>
       <AimLine />
       <BestMarker />
       <Riders />

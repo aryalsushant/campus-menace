@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 
 // Shared materials. Uniforms (time, night) are driven from Atmosphere.
 export const shared = {
@@ -220,20 +221,45 @@ export function materials() {
 // Vertex colours tint the result (white = the texture's own colour).
 const texLoader = new THREE.TextureLoader();
 const texCache = new Map();
-function tex(path, srgb) {
-  if (texCache.has(path)) return texCache.get(path);
-  const t = texLoader.load(path);
+const setup = (t, srgb) => {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 8;
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-  texCache.set(path, t);
   return t;
+};
+function tex(path, srgb) {
+  if (!texCache.has(path)) texCache.set(path, setup(texLoader.load(path), srgb));
+  return texCache.get(path);
 }
+const TEX_DIR = '/assets/textures';
+const TEX_KEYS = ['path', 'brick', 'plaster', 'sandstone', 'slate', 'concrete', 'grass', 'mud', 'bark', 'planks', 'marble', 'metal'];
 export const texSet = key => ({
-  diff: tex(`/assets/textures/${key}_diff.webp`, true),
-  nor: tex(`/assets/textures/${key}_nor.webp`, false),
-  rough: tex(`/assets/textures/${key}_rough.webp`, false),
+  diff: tex(`${TEX_DIR}/${key}_diff.webp`, true),
+  nor: tex(`${TEX_DIR}/${key}_nor.webp`, false),
+  rough: tex(`${TEX_DIR}/${key}_rough.webp`, false),
 });
+
+// Colour and roughness maps ship as KTX2 (Basis) and stay compressed on the
+// GPU. They're loaded up front and stored under the webp path, so texSet()
+// stays synchronous; any file that fails to transcode falls back to its webp.
+let texturesReady = null;
+export function loadTextures(gl) {
+  if (texturesReady) return texturesReady;
+  const ktx2 = new KTX2Loader().setTranscoderPath('/basis/').detectSupport(gl);
+  const jobs = [];
+  for (const key of TEX_KEYS)
+    for (const [map, srgb] of [['diff', true], ['rough', false]]) {
+      const webp = `${TEX_DIR}/${key}_${map}.webp`;
+      jobs.push(
+        ktx2
+          .loadAsync(`${TEX_DIR}/ktx2/${key}_${map}.ktx2`)
+          .then(t => texCache.set(webp, setup(t, srgb)))
+          .catch(() => tex(webp, srgb))
+      );
+    }
+  texturesReady = Promise.all(jobs).then(() => ktx2.dispose());
+  return texturesReady;
+}
 
 const pbrCache = new Map();
 export function pbr(key, { scale = 1, normal = 1, rough = 1, vertexColors = true, top = false, extraVertex = '', extraUniforms = null } = {}) {
