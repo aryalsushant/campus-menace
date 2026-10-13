@@ -42,7 +42,7 @@ const CROSS_UNLOCK = {
 // how much path each beat needs, so nothing spills into the run-up before a crossing
 const BEAT_LEN = { pizzaLine: 8, low1: 6, lowWall: 7, banner: 8, tallPair: 7, slalom: 30, queue: 7, tour: 16, goose: 14, robot: 10, oncoming: 10, oncoming2: 24, weaver: 24, drifter: 14, pack: 16, combo: 22 };
 
-const OBSTACLE_BEATS = new Set(['low1', 'lowWall', 'banner', 'tallPair', 'queue', 'goose', 'robot']);
+const OBSTACLE_BEATS = new Set(['low1', 'lowWall', 'banner', 'tallPair', 'queue', 'goose', 'robot', 'pizzaLine']);
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -167,6 +167,21 @@ export function createGenerator(seed) {
       s += span + gap;
     }
 
+    // background scooter traffic between the beats, never stacked on another rider
+    if (!first) {
+      const D0 = difficultyAt(s0);
+      const spacing = lerp(48, 26, D0);
+      for (let t = s0 + 24 + rng.range(0, spacing); t < s1 - runway - 4; t += spacing * rng.range(0.8, 1.25)) {
+        const busy = world.plannedRiders.some(r => Math.abs((r.meet ?? r.s) - t) < 10);
+        const blocked = world.obstacles.some(o => Math.abs(o.s - t) < 6);
+        if (busy || blocked) continue;
+        if (t > BEAT_UNLOCK.weaver && rng.chance(0.25)) {
+          const vs = speedAt(t) * rng.range(0.38, 0.48);
+          addRider(world, { kind: 'weaver', meet: t, s: t + 14, d: 0, vs, minS: t, maxS: s1 - runway, amp: Math.min(w - 1, rng.range(1.4, 2.4)), freq: rng.range(0.9, 1.4) });
+        } else oncoming(world, t, rng.range(-w + 0.8, w - 0.8));
+      }
+    }
+
     state.genS = s1;
     state.sections++;
     seg.yEnd = state.y;
@@ -179,19 +194,19 @@ export function createGenerator(seed) {
       pizzaLine: lerp(0.7, 0.25, D),
       low1: 2,
       tallPair: 2,
-      oncoming: 3.4,
+      oncoming: 6.8,
       lowWall: 1.7,
       banner: 1.6,
       slalom: 1.4,
-      weaver: 1.9,
+      weaver: 3.8,
       goose: stage === 0 ? 1.2 : 0.6,
       queue: stage === 0 ? 1.2 : 0.5,
-      drifter: 1.7,
-      oncoming2: 2.6,
+      drifter: 3.4,
+      oncoming2: 5.2,
       robot: 1.1,
       tour: stage === 0 ? 1 : 0.4,
-      pack: 1.7,
-      combo: 0.8 + 2 * D,
+      pack: 3.4,
+      combo: 1.6 + 3 * D,
     };
     for (const k in W) if (s >= BEAT_UNLOCK[k]) out.push([k, W[k]]);
     return out;
@@ -214,7 +229,7 @@ export function createGenerator(seed) {
     let len = make(world, s, Math.max(8, room), w, yAtS, stage);
     // past the opening, obstacles often come with a rider behind them
     const D = difficultyAt(s);
-    if (!alone && OBSTACLE_BEATS.has(type) && s > 110 && room > len + 20 && rng.chance(0.18 + 0.45 * D)) {
+    if (!alone && OBSTACLE_BEATS.has(type) && s > 110 && room > len + 20 && rng.chance(0.6 + 0.4 * D)) {
       oncoming(world, s + len + rng.range(9, 15), rng.range(-w + 0.8, w - 0.8));
       len += 10;
     }
@@ -239,7 +254,7 @@ export function createGenerator(seed) {
   function oncoming(world, meet, d, opts = {}) {
     const vr = opts.vr ?? rng.range(lerp(6, 9.5, difficultyAt(meet)), lerp(8, 12, difficultyAt(meet)));
     const spawn = Math.min(meet + vr * RIDER.leadTime, opts.maxSpawn ?? cur.s1 - 6);
-    addRider(world, { kind: 'oncoming', s: spawn, d, vs: -vr, minS: opts.minS ?? Math.max(cur.s0 + 2, meet - 60), maxS: spawn + 1, amp: opts.amp ?? rng.range(0.1, 0.35), freq: rng.range(0.8, 1.6), ...opts.extra });
+    addRider(world, { kind: 'oncoming', meet, s: spawn, d, vs: -vr, minS: opts.minS ?? Math.max(cur.s0 + 2, meet - 60), maxS: spawn + 1, amp: opts.amp ?? rng.range(0.1, 0.35), freq: rng.range(0.8, 1.6), ...opts.extra });
   }
 
   const BEATS = {
