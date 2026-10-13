@@ -132,6 +132,13 @@ export function createBot({ skill = 1, rng = Math.random, showOff = false } = {}
           lastThrow = world.t;
           break;
         }
+        // boxed in by a rider off to the side: aim at them directly, like a tap
+        if (blocked && Math.abs(rd.d - r.d) < 3.5) {
+          inp.throwPressed = true;
+          inp.throwTarget = rd.id;
+          lastThrow = world.t;
+          break;
+        }
       }
     }
 
