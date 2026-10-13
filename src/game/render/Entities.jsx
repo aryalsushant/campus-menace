@@ -4,7 +4,8 @@ import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
 import { useGame } from '../core/store';
-import { Builder } from './geo';
+import { withRim } from './materials';
+import { canAssets, pizzaGeometry } from './props';
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, flatShading: true, ...o });
 const glow = (c, k = 2.2) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
@@ -27,7 +28,10 @@ function mats() {
     hedge: std('#3f7f3a'),
     flower: std('#ff6fa5'),
     goose: std('#f2efe6'),
-    gooseNeck: std('#2b2b2b'),
+    gooseBody: withRim(std('#7a6a58', { flatShading: false, roughness: 0.85 }), '#ffe6c8', 0.35),
+    gooseBreast: std('#d9cbb4', { flatShading: false, roughness: 0.85 }),
+    gooseWing: std('#5f5246', { flatShading: false, roughness: 0.85 }),
+    gooseNeck: std('#1c1c1e', { flatShading: false, roughness: 0.6 }),
     beak: std('#ff9a2a'),
     skin: std('#e9b48f'),
     banner: ['#ffb02e', '#3f8fe8', '#8f5fe8', '#e8476a'].map(c => std(c, { emissive: new THREE.Color(c), emissiveIntensity: 0.35 })),
@@ -265,22 +269,7 @@ function ObstacleModel({ o }) {
     case 'tourist':
       return <Person shirt={m.shirts[(o.seed || 0) % m.shirts.length]} guide={(o.seed || 0) % 5 === 0} />;
     case 'goose':
-      return (
-        <group>
-          <mesh position={[0, 0.34, 0.08]} scale={[0.8, 0.7, 1.2]} material={m.goose} castShadow>
-            <sphereGeometry args={[0.28, 10, 8]} />
-          </mesh>
-          <mesh position={[0, 0.6, -0.22]} rotation={[0.3, 0, 0]} material={m.gooseNeck}>
-            <cylinderGeometry args={[0.05, 0.06, 0.42, 6]} />
-          </mesh>
-          <mesh position={[0, 0.82, -0.3]} material={m.gooseNeck}>
-            <sphereGeometry args={[0.09, 8, 6]} />
-          </mesh>
-          <mesh position={[0, 0.8, -0.42]} rotation={[-Math.PI / 2, 0, 0]} material={m.beak}>
-            <coneGeometry args={[0.04, 0.14, 6]} />
-          </mesh>
-        </group>
-      );
+      return <Goose o={o} />;
     case 'robot':
       // sidewalk delivery robot: white tub on six wheels, flag on a whip antenna
       return (
@@ -332,6 +321,97 @@ function ObstacleModel({ o }) {
         </mesh>
       );
   }
+}
+
+
+// Canada goose: grey-brown body, pale breast, black neck and head with a
+// white chinstrap. Wings spread and flap and the neck pumps when it chases.
+function Goose({ o }) {
+  const m = mats();
+  const wingL = useRef();
+  const wingR = useRef();
+  const neck = useRef();
+  const legs = useRef();
+  const neckCurve = useMemo(() => {
+    const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.2, -0.06), new THREE.Vector3(0, 0.38, -0.04), new THREE.Vector3(0, 0.5, -0.1)]);
+    return new THREE.TubeGeometry(c, 16, 0.045, 8, false);
+  }, []);
+  useFrame(state => {
+    const t = state.clock.elapsedTime + o.id;
+    const chase = o.chasing && !o.hit;
+    const flap = chase ? Math.sin(t * 16) * 0.6 + 0.7 : 0.05;
+    if (wingL.current) wingL.current.rotation.z = flap;
+    if (wingR.current) wingR.current.rotation.z = -flap;
+    if (neck.current) {
+      neck.current.rotation.x = chase ? -0.5 + Math.sin(t * 8) * 0.25 : Math.sin(t * 1.5) * 0.08;
+      neck.current.position.z = chase ? -0.14 : -0.16;
+    }
+    if (legs.current) legs.current.children.forEach((l, i) => (l.rotation.x = Math.sin(t * (chase ? 18 : 6) + i * Math.PI) * (chase ? 0.6 : 0.3)));
+  });
+  return (
+    <group scale={1.15}>
+      {/* body and breast */}
+      <mesh position={[0, 0.38, 0.04]} scale={[0.72, 0.62, 1.15]} material={m.gooseBody} castShadow>
+        <sphereGeometry args={[0.27, 16, 12]} />
+      </mesh>
+      <mesh position={[0, 0.34, -0.12]} scale={[0.68, 0.6, 0.7]} material={m.gooseBreast} castShadow>
+        <sphereGeometry args={[0.24, 14, 10]} />
+      </mesh>
+      {/* tail */}
+      <mesh position={[0, 0.44, 0.34]} rotation={[0.5, 0, 0]} scale={[0.5, 0.25, 0.6]} material={m.gooseNeck}>
+        <sphereGeometry args={[0.15, 10, 8]} />
+      </mesh>
+      <mesh position={[0, 0.3, 0.28]} scale={[0.5, 0.3, 0.4]} material={m.white}>
+        <sphereGeometry args={[0.13, 10, 8]} />
+      </mesh>
+      {/* wings */}
+      {[
+        [wingL, -1],
+        [wingR, 1],
+      ].map(([ref, side]) => (
+        <group key={side} ref={ref} position={[side * 0.17, 0.48, 0.02]}>
+          <mesh position={[side * 0.12, 0, 0.06]} scale={[0.9, 0.18, 1.5]} material={m.gooseWing} castShadow>
+            <sphereGeometry args={[0.16, 12, 8]} />
+          </mesh>
+        </group>
+      ))}
+      {/* neck, head, chinstrap, beak */}
+      <group ref={neck} position={[0, 0.5, -0.16]}>
+        <mesh geometry={neckCurve} material={m.gooseNeck} castShadow />
+        <group position={[0, 0.52, -0.12]}>
+          <mesh scale={[0.75, 0.8, 1.15]} material={m.gooseNeck} castShadow>
+            <sphereGeometry args={[0.075, 12, 10]} />
+          </mesh>
+          {[-1, 1].map(side => (
+            <mesh key={side} position={[side * 0.045, -0.02, 0.01]} scale={[0.35, 0.75, 0.9]} material={m.white}>
+              <sphereGeometry args={[0.06, 10, 8]} />
+            </mesh>
+          ))}
+          <mesh position={[0, -0.01, -0.1]} rotation={[-Math.PI / 2, 0, 0]} scale={[1, 1, 0.6]} material={m.gooseNeck}>
+            <coneGeometry args={[0.032, 0.1, 8]} />
+          </mesh>
+          {[-1, 1].map(side => (
+            <mesh key={side} position={[side * 0.042, 0.02, -0.03]} material={m.black}>
+              <sphereGeometry args={[0.012, 6, 6]} />
+            </mesh>
+          ))}
+        </group>
+      </group>
+      {/* legs */}
+      <group ref={legs}>
+        {[-0.08, 0.08].map(x => (
+          <group key={x} position={[x, 0.22, 0.04]}>
+            <mesh position={[0, -0.1, 0]} material={m.gooseNeck}>
+              <cylinderGeometry args={[0.015, 0.015, 0.2, 5]} />
+            </mesh>
+            <mesh position={[0, -0.2, -0.04]} material={m.gooseNeck}>
+              <boxGeometry args={[0.08, 0.015, 0.1]} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+    </group>
+  );
 }
 
 const Obstacle = memo(function Obstacle({ o }) {
@@ -427,26 +507,6 @@ export function VendingMachines() {
 }
 
 // ------------------------------------------------------------------- pizza
-function pizzaGeometry() {
-  const b = new Builder();
-  // a wedge: cheese top, crust edge, pepperoni
-  const shape = new THREE.Shape();
-  shape.moveTo(0, -0.36);
-  shape.lineTo(-0.3, 0.26);
-  shape.quadraticCurveTo(0, 0.34, 0.3, 0.26);
-  shape.lineTo(0, -0.36);
-  const wedge = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false });
-  wedge.translate(0, 0, -0.03);
-  b.add(wedge, { color: '#ffc845', jitter: 0 });
-  b.add(new THREE.CylinderGeometry(0.06, 0.06, 0.64, 8), { pos: [0, 0.29, 0], rot: [0, 0, Math.PI / 2], color: '#d98a3a', jitter: 0 });
-  for (const [x, y] of [
-    [-0.08, 0.1],
-    [0.1, 0.05],
-    [0, -0.12],
-  ])
-    b.add(new THREE.CylinderGeometry(0.055, 0.055, 0.02, 10), { pos: [x, y, 0.04], rot: [Math.PI / 2, 0, 0], color: '#d6402f', jitter: 0 });
-  return b.build();
-}
 
 const MAXP = 360;
 export function Pickups() {
@@ -585,7 +645,7 @@ function placePower(g, p, world, t, w) {
 const CANS = 10;
 export function Cans() {
   const group = useRef();
-  const m = useMemo(() => new THREE.MeshStandardMaterial({ color: '#3dffb0', metalness: 0.7, roughness: 0.25, emissive: new THREE.Color('#1aa070'), emissiveIntensity: 0.6 }), []);
+  const c = useMemo(canAssets, []);
   const q = useMemo(() => ({}), []);
   const w = useMemo(() => ({}), []);
   useFrame(state => {
@@ -607,9 +667,10 @@ export function Cans() {
   return (
     <group ref={group}>
       {Array.from({ length: CANS }, (_, i) => (
-        <mesh key={i} material={m} visible={false} castShadow>
-          <cylinderGeometry args={[0.07, 0.07, 0.22, 10]} />
-        </mesh>
+        <group key={i} visible={false} scale={2.4}>
+          <mesh geometry={c.geo} material={c.body} castShadow />
+          <mesh geometry={c.tabGeo} material={c.tab} />
+        </group>
       ))}
     </group>
   );
