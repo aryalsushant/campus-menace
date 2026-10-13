@@ -210,3 +210,77 @@ export function materials() {
   _mats = { terrain, props, metal, path, lawn, canopy, glow, windows, water, brick, roof, leaf };
   return _mats;
 }
+
+// ---------------------------------------------------------------------------
+// Triplanar PBR: real CC0 textures (Poly Haven) projected in world space,
+// so merged geometry without UVs still gets brick courses, slate, bark…
+// Vertex colours tint the result (white = the texture's own colour).
+const texLoader = new THREE.TextureLoader();
+const texCache = new Map();
+function tex(path, srgb) {
+  if (texCache.has(path)) return texCache.get(path);
+  const t = texLoader.load(path);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  texCache.set(path, t);
+  return t;
+}
+export const texSet = key => ({
+  diff: tex(`/assets/textures/${key}_diff.webp`, true),
+  nor: tex(`/assets/textures/${key}_nor.webp`, false),
+  rough: tex(`/assets/textures/${key}_rough.webp`, false),
+});
+
+const pbrCache = new Map();
+export function pbr(key, { scale = 1, normal = 1, rough = 1, flat = true, vertexColors = true, extraVertex = '', extraUniforms = null } = {}) {
+  const id = `${key}-${scale}-${normal}-${rough}-${flat}-${vertexColors}-${extraVertex ? 'x' : ''}`;
+  if (pbrCache.has(id)) return pbrCache.get(id);
+  const T = texSet(key);
+  const m = new THREE.MeshStandardMaterial({ vertexColors, flatShading: false, roughness: 1, metalness: 0 });
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, { tDiff: { value: T.diff }, tNor: { value: T.nor }, tRough: { value: T.rough }, uTriScale: { value: scale }, uTriNormal: { value: normal }, uTriRough: { value: rough } }, extraUniforms || {});
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTriP; varying vec3 vTriN;\n' + (extraUniforms ? 'uniform float uTime;' : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + extraVertex)
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTriP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTriN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vTriP; varying vec3 vTriN;
+        uniform sampler2D tDiff; uniform sampler2D tNor; uniform sampler2D tRough;
+        uniform float uTriScale; uniform float uTriNormal; uniform float uTriRough;
+        vec3 triW() { vec3 w = pow(abs(normalize(vTriN)), vec3(6.0)); return w / (w.x + w.y + w.z); }`
+      )
+      .replace(
+        '#include <map_fragment>',
+        `vec3 tw = triW();
+        vec2 uvX = vTriP.zy * uTriScale; vec2 uvY = vTriP.xz * uTriScale; vec2 uvZ = vTriP.xy * uTriScale;
+        vec3 albedo = texture2D(tDiff, uvX).rgb * tw.x + texture2D(tDiff, uvY).rgb * tw.y + texture2D(tDiff, uvZ).rgb * tw.z;
+        diffuseColor.rgb *= albedo;`
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `float roughnessFactor = roughness * uTriRough * (texture2D(tRough, uvX).g * tw.x + texture2D(tRough, uvY).g * tw.y + texture2D(tRough, uvZ).g * tw.z);`
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `{
+          // UDN-blended triplanar normal map (Ben Golus), built in world space
+          vec3 nW = normalize(vTriN);
+          vec3 tX = texture2D(tNor, uvX).xyz * 2.0 - 1.0;
+          vec3 tY = texture2D(tNor, uvY).xyz * 2.0 - 1.0;
+          vec3 tZ = texture2D(tNor, uvZ).xyz * 2.0 - 1.0;
+          tX = vec3(tX.xy * uTriNormal + nW.zy, nW.x);
+          tY = vec3(tY.xy * uTriNormal + nW.xz, nW.y);
+          tZ = vec3(tZ.xy * uTriNormal + nW.xy, nW.z);
+          vec3 wn = normalize(tX.zyx * tw.x + tY.xzy * tw.y + tZ.xyz * tw.z);
+          normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+        }`
+      );
+  };
+  m.customProgramCacheKey = () => `pbr-${id}`;
+  pbrCache.set(id, m);
+  return m;
+}
