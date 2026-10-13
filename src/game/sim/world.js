@@ -181,6 +181,7 @@ function updateObstacles(world, dt) {
       if (ds > 0 && ds < 26) {
         const dir = Math.sign(r.d - o.d);
         o.d += dir * Math.min(Math.abs(r.d - o.d), o.chase * dt);
+        if (!o.chasing) world.emit('goose', { id: o.id, s: o.s, d: o.d });
         o.chasing = true;
       }
     }
@@ -272,6 +273,7 @@ function updateRiders(world, dt) {
     if (Math.abs(ds) < 2) rd.minAbsD = Math.min(rd.minAbsD, dd);
     const side = Math.sign(ds);
     if (side !== rd.side && side !== 0) {
+      if (rd.side > 0 && dd < 3.5) world.emit('riderPass', { id: rd.id, d: rd.d - r.d, near: dd });
       if (rd.side > 0 && rd.minAbsD < RIDER.closeCall && !rd.closeCalled) {
         rd.closeCalled = true;
         world.stats.closeCalls++;

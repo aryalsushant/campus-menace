@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, runnerLerp, toWorld } from '../core/runtime';
-import { on } from '../core/bus';
+import { on, emit } from '../core/bus';
 import { withRim } from './materials';
 import { canAssets } from './props';
 
@@ -141,7 +141,12 @@ export default function Student() {
     const speed = r.speed;
     const cadence = 1.25 + speed * 0.045;
     const running = r.grounded && r.slideT <= 0 && !S.death;
-    if (running) S.phase = (S.phase + dt * cadence) % 1;
+    if (running) {
+      const before = S.phase;
+      S.phase = (S.phase + dt * cadence) % 1;
+      // a footfall each half stride
+      if ((before < 0.25 && S.phase >= 0.25) || (before < 0.75 && S.phase >= 0.75)) emit('step', { foot: S.phase < 0.5 ? -1 : 1 });
+    }
     const p = S.phase * Math.PI * 2;
     const intensity = Math.min(1, 0.55 + speed / 30);
 
