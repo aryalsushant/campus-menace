@@ -6,3 +6,5 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overscroll-behavior: none; }
 body { font-family: system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.cm-root { position: fixed; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cm-canvas { position: absolute !important; inset: 0; }

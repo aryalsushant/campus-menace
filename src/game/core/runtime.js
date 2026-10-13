@@ -160,3 +160,16 @@ export function toWorld(s, d, y, out) {
   return p.h;
 }
 const _pose = {};
+
+// dev helper: let the bot play until distance `toS` (headless testing)
+export function fastForward(toS) {
+  const w = runtime.world;
+  const bot = createBot({ skill: 1 });
+  while (!w.over && w.runner.s < toS) {
+    snapshot(w);
+    stepWorld(w, bot.think(w));
+    drainEvents(w);
+  }
+  snapshot(w);
+  setGame({ segVersion: getGame().segVersion + 1, objVersion: getGame().objVersion + 1 });
+}
