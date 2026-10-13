@@ -68,7 +68,58 @@ export function createGenerator(seed) {
     nextVend: 380,
     lastCross: null,
     sections: 0,
+    breathed: new Set(),
   };
+  // Intensity comes in waves (~16-22 s each): pressure builds to a crest,
+  // then a 2-3 s breather full of pizza pays it off. Wave lengths are
+  // randomised so the rhythm can't be predicted.
+  const waves = [];
+  function waveAt(s) {
+    if (!waves.length) waves.push({ s0: 0, len: 260, index: 0 });
+    let w = waves[waves.length - 1];
+    while (s >= w.s0 + w.len) {
+      const v = speedAt(w.s0 + w.len);
+      w = { s0: w.s0 + w.len, len: v * rng.range(16, 22), index: w.index + 1 };
+      waves.push(w);
+      if (waves.length > 8) waves.shift();
+    }
+    for (let i = waves.length - 1; i >= 0; i--) if (s >= waves[i].s0) w = waves[i];
+    const t = (s - w.s0) / w.len; // 0..1 through the wave
+    const breather = t > 0.86 && w.index > 0;
+    // 1.25 (easier) at the start of a wave down to 0.72 at the crest
+    const mul = breather ? 1 : lerp(1.25, 0.72, Math.min(1, t / 0.86));
+    return { mul, breather, index: w.index };
+  }
+
+  // scripted first seconds: jump, dodge, slide, then a scooter, ~5 s in
+  function opening(world, s0, w, yAtS) {
+    const v = speedAt(s0);
+    let s = s0 + v * 4.2;
+    pizzaLine(world, s0 + 8, s - 6, () => 0, x => yAtS(x) + 1, 2.4);
+    BEATS.low1(world, s, 30, w, yAtS, 0);
+    seenBeats.add('low1');
+    s += v * 1.9;
+    BEATS.tallPair(world, s, 30, w, yAtS, 0);
+    seenBeats.add('tallPair');
+    s += v * 1.9;
+    oncoming(world, s, rng.range(-1.5, 1.5));
+    seenBeats.add('oncoming');
+    s += v * 2.1;
+    BEATS.banner(world, s, 30, w, yAtS, 0);
+    seenBeats.add('banner');
+    s += v * 1.8;
+    return s;
+  }
+
+  // a dense arc of pizza with a chance of something special in it
+  function rush(world, s, len, w, yAtS) {
+    const d0 = rng.range(-w + 1.2, w - 1.2);
+    const amp = Math.min(w - 1, 2.2);
+    pizzaLine(world, s, s + len, x => clamp(d0 + Math.sin((x - s) * 0.18) * amp, -w + 0.8, w - 0.8), x => yAtS(x) + 1, 1.6);
+    if (rng.chance(0.3)) world.pickups.push({ id: objId++, kind: 'golden', s: s + len * 0.55, d: clamp(d0, -w + 1, w - 1), y: yAtS(s) + 1.3, taken: false });
+    else if (rng.chance(0.35)) powerUp(world, s + len * 0.5, clamp(d0, -w + 1, w - 1), yAtS(s));
+  }
+
   // the section currently being filled; riders are kept inside it
   let cur = { s0: 0, s1: 0 };
 
@@ -104,7 +155,7 @@ export function createGenerator(seed) {
     const D = difficultyAt(s0);
     const plaza = stage === 0 && !first && rng.chance(0.18);
     const w = first ? 5.4 : plaza ? rng.range(6.6, 7.4) : [rng.range(5, 5.8), rng.range(4.4, 5.2), rng.range(3.9, 4.7)][stage];
-    const len = first ? 120 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
+    const len = first ? 190 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
     const s1 = s0 + len;
     cur = { s0, s1 };
 
@@ -156,13 +207,24 @@ export function createGenerator(seed) {
     }
 
     // beats
-    const clearStart = first ? 16 : 10;
     const runway = 20;
-    let s = s0 + clearStart;
     const end = s1 - runway;
+    let s = s0 + 10;
+    if (first) s = opening(world, s0, w, yAtS);
     while (s < end - 6) {
       const v = speedAt(s);
-      const gap = v * lerp(1.45, 0.72, difficultyAt(s));
+      const wave = waveAt(s);
+      // breather at the bottom of each wave: a short pizza rush, then back in
+      if (wave.breather && !state.breathed.has(wave.index)) {
+        state.breathed.add(wave.index);
+        const len = Math.min(end - s, v * 2.4);
+        rush(world, s, len, w, yAtS);
+        s += len + v * 0.4;
+        continue;
+      }
+      // spacing tightens at the crest of each wave, with random jitter so
+      // nothing settles into a predictable rhythm
+      const gap = v * lerp(1.45, 0.72, difficultyAt(s)) * wave.mul * rng.range(0.7, 1.3);
       const span = beat(world, s, end, w, yAtS, stage, ramp ? parts[1] : null);
       s += span + gap;
     }
@@ -264,7 +326,11 @@ export function createGenerator(seed) {
       const amp = rng.chance(0.5) ? rng.range(1, Math.min(2.6, w - 1)) : 0;
       const f = rng.range(0.06, 0.12);
       pizzaLine(world, s, s + len, x => clamp(d0 + amp * Math.sin((x - s) * f), -w + 0.8, w - 0.8), x => yAtS(x) + 1);
-      if (s > 220 && rng.chance(0.18)) powerUp(world, s + len * 0.6, clamp(d0, -w + 1, w - 1), yAtS(s + len * 0.6));
+      if (!state.firstPower && s > 160) {
+        state.firstPower = true;
+        powerUp(world, s + len * 0.6, clamp(d0, -w + 1, w - 1), yAtS(s + len * 0.6));
+      } else if (s > 160 && rng.chance(0.16)) powerUp(world, s + len * 0.6, clamp(d0, -w + 1, w - 1), yAtS(s + len * 0.6));
+      else if (rng.chance(0.08)) world.pickups.push({ id: objId++, kind: 'golden', s: s + len * 0.5, d: clamp(d0, -w + 1, w - 1), y: yAtS(s) + 1.3, taken: false });
       return len;
     },
     low1(world, s, room, w, yAtS, stage) {

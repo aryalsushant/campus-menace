@@ -398,7 +398,7 @@ function updatePickups(world, dt) {
     if (p.dropped && world.t - p.bornAt < 0.25) continue;
     let ds = p.s - r.s;
     if (ds > 12 || ds < -2) continue;
-    if (P.magnet > 0 && p.kind === 'pizza') {
+    if (P.magnet > 0 && (p.kind === 'pizza' || p.kind === 'golden')) {
       const dd = p.d - r.d;
       const dy = p.y - cy;
       const dist = Math.hypot(ds, dd, dy);
@@ -416,6 +416,9 @@ function updatePickups(world, dt) {
       if (p.kind === 'pizza') {
         addScore(world, 1);
         world.emit('pizza', { id: p.id, s: p.s, d: p.d, y: p.y, score: world.score });
+      } else if (p.kind === 'golden') {
+        addScore(world, 5);
+        world.emit('golden', { id: p.id, s: p.s, d: p.d, y: p.y, score: world.score });
       } else {
         if (p.kind === 'magnet') P.magnet = POWER.magnet;
         else if (p.kind === 'coffee') P.coffee = POWER.coffee;
