@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
@@ -6,6 +6,7 @@ import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
 import { emit } from '../core/bus';
 import { useGame } from '../core/store';
 import { withRim, pbr } from './materials';
+import { mergeStatic } from './geo';
 import { loadPeople, makePerson, randomLook } from './people';
 import { canAssets, pizzaGeometry } from './props';
 
@@ -548,10 +549,16 @@ const Obstacle = memo(function Obstacle({ o }) {
       I.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 5 + o.id)) * 0.03;
     }
   }, -15);
+  const model = useRef();
+  useLayoutEffect(() => {
+    if (model.current && o.model !== 'goose' && o.model !== 'student' && o.model !== 'tourist') mergeStatic(model.current);
+  }, [o]);
   return (
     <group ref={ref}>
       <group ref={inner}>
-        <ObstacleModel o={o} />
+        <group ref={model}>
+          <ObstacleModel o={o} />
+        </group>
       </group>
     </group>
   );
@@ -585,6 +592,9 @@ const Vending = memo(function Vending({ v }) {
     panelMat.color.set(used ? '#2a8a6a' : '#3dffb0').multiplyScalar(used ? 1 : 1.4 + Math.sin(t * 5) * 0.4);
     if (panel.current) panel.current.scale.y = 1;
   });
+  useLayoutEffect(() => {
+    if (ref.current) mergeStatic(ref.current);
+  }, []);
   return (
     <group ref={ref}>
       <RoundedBox args={[1.2, 2.2, 0.9]} radius={0.06} position={[0, 1.1, 0]} material={m.black} castShadow />

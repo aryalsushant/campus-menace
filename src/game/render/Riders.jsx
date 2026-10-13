@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { runtime, lerpEntity, toWorld } from '../core/runtime';
 import { on } from '../core/bus';
 import { withRim } from './materials';
+import { mergeStatic } from './geo';
 import { loadPeople, makePerson, randomLook, attach, bindPosition } from './people';
 
 // Scooter riders. A fixed pool of models is assigned to live riders each
@@ -50,6 +51,10 @@ function RiderModel({ slot }) {
     [slot]
   );
   const rig = useRef(null);
+  // the scooter's parts never move relative to each other: one mesh per material
+  useLayoutEffect(() => {
+    if (scooter.current) mergeStatic(scooter.current);
+  }, []);
   useEffect(() => {
     runtime.riderSlots = runtime.riderSlots || [];
     runtime.riderSlots[slot] = { root, person, scooter, ring, rig };

@@ -103,3 +103,39 @@ export function gableGeometry(w, h, d) {
 }
 
 export const color = c => new THREE.Color(c);
+
+// Merge every static mesh under `group` into one mesh per material, keeping
+// their transforms relative to `group`. Children named "anim" (and their
+// subtrees) stay separate so they can still move. Same look, far fewer
+// draw calls.
+export function mergeStatic(group) {
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const buckets = new Map();
+  const remove = [];
+  group.traverse(o => {
+    if (o === group) return;
+    for (let p = o; p && p !== group; p = p.parent) if (p.name === 'anim') return;
+    if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || Array.isArray(o.material)) return;
+    const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (!g.attributes.normal) g.computeVertexNormals();
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    const key = o.material.uuid + (o.castShadow ? 's' : '');
+    if (!buckets.has(key)) buckets.set(key, { material: o.material, cast: o.castShadow, receive: o.receiveShadow, parts: [] });
+    buckets.get(key).parts.push(g);
+    remove.push(o);
+  });
+  if (remove.length < 2) return;
+  for (const o of remove) o.parent.remove(o);
+  for (const b of buckets.values()) {
+    const merged = mergeGeometries(b.parts, false);
+    b.parts.forEach(p => p.dispose());
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, b.material);
+    mesh.castShadow = b.cast;
+    mesh.receiveShadow = b.receive;
+    group.add(mesh);
+  }
+}
