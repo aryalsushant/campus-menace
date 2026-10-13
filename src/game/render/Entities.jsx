@@ -30,7 +30,7 @@ function mats() {
     gooseNeck: std('#2b2b2b'),
     beak: std('#ff9a2a'),
     skin: std('#e9b48f'),
-    banner: [std('#ffb02e'), std('#3f8fe8'), std('#8f5fe8'), std('#e8476a')],
+    banner: ['#ffb02e', '#3f8fe8', '#8f5fe8', '#e8476a'].map(c => std(c, { emissive: new THREE.Color(c), emissiveIntensity: 0.35 })),
     shirts: ['#3fb4e8', '#8f5fe8', '#e8476a', '#2fbf8f', '#f2c63a', '#ff8a3d'].map(c => std(c)),
     pants: std('#2b3242'),
     lampGlow: glow('#ffd9a0', 1.8),

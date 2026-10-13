@@ -31,13 +31,8 @@ const Section = memo(function Section({ seg }) {
 function CollapsePlank({ geo, center, padId }) {
   const ref = useRef();
   const st = useRef({ fall: 0, vy: 0, spin: (Math.random() - 0.5) * 2 });
-  // geometry is in world space around `center`; recentre so it can rotate
-  const local = useMemo(() => {
-    const g = geo.clone();
-    g.translate(-center.x, -center.y, -center.z);
-    return g;
-  }, [geo, center]);
-  useEffect(() => () => local.dispose(), [local]);
+  // geometry is built around the origin; the mesh sits at `center`
+  const local = geo;
   useFrame((_, dt) => {
     const pad = runtime.world.surfaces.pads.find(p => p.id === padId);
     const o = ref.current;

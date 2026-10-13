@@ -237,6 +237,7 @@ function Lights({ shadows, shadowSize }) {
   return (
     <>
       <hemisphereLight ref={hemi} args={['#ffffff', '#888888', 1]} />
+      <FillLight />
       <directionalLight
         ref={sun}
         castShadow={shadows}
@@ -254,6 +255,30 @@ function Lights({ shadows, shadowSize }) {
       />
     </>
   );
+}
+
+// soft key light from behind the camera so faces turned toward the player
+// stay readable even when the sun is low ahead
+function FillLight() {
+  const ref = useRef();
+  const { camera, scene } = useThree();
+  const target = useMemo(() => new THREE.Object3D(), []);
+  useEffect(() => {
+    scene.add(target);
+    return () => scene.remove(target);
+  }, [scene, target]);
+  const dir = useMemo(() => new THREE.Vector3(), []);
+  useFrame(() => {
+    const L = ref.current;
+    if (!L) return;
+    camera.getWorldDirection(dir);
+    L.position.copy(camera.position).addScaledVector(dir, -4).add({ x: 0, y: 6, z: 0 });
+    target.position.copy(camera.position).addScaledVector(dir, 20);
+    L.target = target;
+    L.intensity = 0.75 + SKY.night * 0.3;
+    L.color.copy(SKY.sunColor).lerp(SKY.hemiSky, 0.5);
+  });
+  return <directionalLight ref={ref} />;
 }
 
 export default function Atmosphere({ shadows = true, shadowSize = 2048 }) {
