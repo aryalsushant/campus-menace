@@ -24,6 +24,8 @@ export async function startRun() {
   }
   clearTimeout(overTimer);
   clearInput();
+  // Space throws now: make sure no button keeps focus during the run
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   const seed = randomSeed() & 0x7fffffff;
   startWorld('play', seed);
   runtime.input = readInput;

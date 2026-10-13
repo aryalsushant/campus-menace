@@ -9,9 +9,9 @@ with React Three Fiber and Supabase.
 | | Laptop | Phone |
 |---|---|---|
 | Steer | ← / → | Tilt (or drag a thumb) |
-| Jump, double jump | ↑ or Space | Swipe up |
+| Jump, double jump | ↑ or W | Swipe up |
 | Slide | ↓ | Swipe down |
-| Throw a can | Enter (straight ahead) | Tap a rider |
+| Throw a can | Space (straight ahead) | Tap a rider |
 | Sprint | Shift | – |
 | Pause | Esc / P | ❚❚ button |
 

@@ -20,7 +20,7 @@ with energy drink cans. Score is pizza.
 | Narrow bridges | Only spawn a rider if you have a can; always a vending machine before |
 | Camera | Heading-up follow camera behind the student, path always points up-screen |
 | Turns | Path curves are followed automatically; steering is lateral only |
-| Desktop | ←/→ steer, ↑/Space jump (double jump), ↓ slide, Enter throw straight ahead, Shift sprint |
+| Desktop | ←/→ steer, ↑/W jump (double jump), ↓ slide, Space throw straight ahead, Shift sprint |
 | Mobile | Tilt to steer (drag fallback), swipe up/down jump/slide, tap a rider to throw |
 | Accounts | Sign in required before playing; landing page shows an attract-mode run behind the card |
 | Auth (phase 1) | Email + password demo accounts only. Email codes (Resend) and Google come later |

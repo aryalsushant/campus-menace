@@ -225,9 +225,9 @@ export function Controls({ touch }) {
   return (
     <ul className="cm-controls">
       <li><kbd>←</kbd><kbd>→</kbd> steer</li>
-      <li><kbd>↑</kbd> / <kbd>Space</kbd> jump, again to double jump</li>
+      <li><kbd>↑</kbd> / <kbd>W</kbd> jump, again to double jump</li>
       <li><kbd>↓</kbd> slide</li>
-      <li><kbd>Enter</kbd> throw a can straight ahead</li>
+      <li><kbd>Space</kbd> throw a can straight ahead</li>
     </ul>
   );
 }

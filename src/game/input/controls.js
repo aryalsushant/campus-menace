@@ -5,8 +5,8 @@ import { getGame } from '../core/store';
 // Keyboard (laptops) and touch (phones) feed one input object that the
 // simulation reads every fixed step.
 //
-// Laptop: ←/→ (A/D) steer · ↑/Space (W) jump, again in the air to double jump
-//         ↓ (S) slide · Enter throw straight ahead · Shift sprint
+// Laptop: ←/→ (A/D) steer · ↑ (W) jump, again in the air to double jump
+//         ↓ (S) slide · Space throw straight ahead (Enter works too) · Shift sprint
 // Phone:  tilt to steer (or drag a thumb) · swipe up jump · swipe down slide
 //         tap a rider to throw at them
 
@@ -26,7 +26,8 @@ const st = {
 const isTyping = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const LEFT = ['ArrowLeft', 'KeyA'];
 const RIGHT = ['ArrowRight', 'KeyD'];
-const JUMP = ['ArrowUp', 'KeyW', 'Space'];
+const JUMP = ['ArrowUp', 'KeyW'];
+const THROW = ['Space', 'Enter', 'NumpadEnter'];
 const SLIDE = ['ArrowDown', 'KeyS'];
 const anyOf = list => list.some(k => keys.has(k));
 
@@ -74,7 +75,7 @@ export function attachKeyboard(onAction) {
       return;
     }
     const playing = getGame().phase === 'playing' && !getGame().paused;
-    if ([...LEFT, ...RIGHT, ...JUMP, ...SLIDE].includes(c) && playing) e.preventDefault();
+    if ([...LEFT, ...RIGHT, ...JUMP, ...SLIDE, ...THROW].includes(c) && playing) e.preventDefault();
     if (!playing) {
       // let focused buttons handle Enter/Space; other keys can still start a run
       const onControl = e.target && e.target.closest && e.target.closest('button, a, input, select');
@@ -87,10 +88,7 @@ export function attachKeyboard(onAction) {
     if (e.repeat) return;
     if (JUMP.includes(c)) st.jumpPressed = true;
     if (SLIDE.includes(c)) st.slidePressed = true;
-    if (c === 'Enter' || c === 'NumpadEnter') {
-      st.throwPressed = true;
-      e.preventDefault();
-    }
+    if (THROW.includes(c)) st.throwPressed = true;
   };
   const up = e => keys.delete(e.code);
   const blur = () => clearInput();
