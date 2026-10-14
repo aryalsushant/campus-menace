@@ -3,6 +3,26 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// What an email link brought us back with (read before the client consumes the URL):
+// type is 'signup' | 'recovery' | ..., error is a message for an expired or used link.
+export const authLink = (() => {
+  if (typeof window === 'undefined') return {};
+  const p = new URLSearchParams(window.location.hash.slice(1) || window.location.search.slice(1));
+  const error = p.get('error_description') || (p.get('error_code') && p.get('error_code').replace(/_/g, ' '));
+  return { type: p.get('type'), error: error ? linkError(p.get('error_code'), error) : null };
+})();
+
+function linkError(code, msg) {
+  if (code === 'otp_expired') return 'That email link has expired or was already used. Sign in to get a new one.';
+  return msg.replace(/\+/g, ' ');
+}
+
+export const clearAuthLink = () => {
+  if (window.location.href.includes('#') || /[?&](error|code|type)=/.test(window.location.search)) window.history.replaceState(window.history.state, '', window.location.pathname);
+};
+
+const home = () => `${window.location.origin}/`;
+
 export const supabase = url && key ? createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } }) : null;
 
 const unwrap = ({ data, error }) => {
@@ -13,9 +33,31 @@ const unwrap = ({ data, error }) => {
 function friendly(error) {
   const m = error.message || String(error);
   if (/Invalid login credentials/i.test(m)) return 'Wrong email or password.';
-  if (/Email not confirmed/i.test(m)) return 'Confirm your email first.';
+  if (/Email not confirmed/i.test(m)) return 'Confirm your email first. Check your inbox for the link.';
+  if (/User already registered/i.test(m)) return 'There’s already an account with that email. Sign in instead.';
+  if (/Password should be at least/i.test(m)) return 'Use at least 8 characters for your password.';
+  if (/rate limit|only request this after/i.test(m)) return 'Too many emails. Wait a minute and try again.';
+  if (/Unable to validate email|invalid format/i.test(m)) return 'That email address doesn’t look right.';
+  if (/New password should be different/i.test(m)) return 'Pick a password you haven’t used here before.';
   if (/fetch/i.test(m)) return 'Can’t reach the server. Check your connection.';
   return m;
+}
+
+let profileReq = null;
+
+async function loadProfile() {
+  const { data: u } = await supabase.auth.getUser();
+  if (!u.user) return null;
+  const rows = unwrap(await supabase.from('profiles').select('id, username').eq('id', u.user.id).limit(1));
+  if (rows[0]) return rows[0];
+  // first sign-in after confirming: claim the username picked at sign-up
+  const wanted = u.user.user_metadata && u.user.user_metadata.username;
+  if (!wanted) return null;
+  try {
+    return unwrap(await supabase.rpc('claim_username', { p_username: wanted }));
+  } catch {
+    return null; // taken meanwhile: the username screen asks again
+  }
 }
 
 export const api = {
@@ -28,21 +70,38 @@ export const api = {
   },
   onAuth(fn) {
     if (!supabase) return () => {};
-    const { data } = supabase.auth.onAuthStateChange((_e, session) => fn(session));
+    const { data } = supabase.auth.onAuthStateChange((e, session) => fn(session, e));
     return () => data.subscription.unsubscribe();
   },
   async signIn(email, password) {
     return unwrap(await supabase.auth.signInWithPassword({ email: email.trim(), password }));
   },
+  // Creates an unconfirmed account; Supabase emails a link back to this site.
+  // The username rides along in user metadata and is claimed on first sign-in.
+  async signUp(email, password, username) {
+    const data = unwrap(await supabase.auth.signUp({ email: email.trim(), password, options: { data: { username }, emailRedirectTo: home() } }));
+    // an already-confirmed email comes back with no identities instead of an error
+    if (data.user && data.user.identities && data.user.identities.length === 0) throw new Error('There’s already an account with that email. Sign in instead.');
+    return data;
+  },
+  async resendConfirmation(email) {
+    unwrap(await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: home() } }));
+  },
+  async sendPasswordReset(email) {
+    unwrap(await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: home() }));
+  },
+  async setPassword(password) {
+    unwrap(await supabase.auth.updateUser({ password }));
+  },
   async signOut() {
     await supabase.auth.signOut();
   },
 
-  async profile() {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return null;
-    const rows = unwrap(await supabase.from('profiles').select('id, username').eq('id', u.user.id).limit(1));
-    return rows[0] || null;
+  // The initial session and the SIGNED_IN event both load the profile at once;
+  // share one request so the first-sign-in username claim runs only once.
+  profile() {
+    if (!profileReq) profileReq = loadProfile().finally(() => (profileReq = null));
+    return profileReq;
   },
   async usernameAvailable(name) {
     return unwrap(await supabase.rpc('username_available', { p_username: name }));

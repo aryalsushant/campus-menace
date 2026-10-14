@@ -233,3 +233,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .cm-speedlines, .cm-start-pulse, .cm-newbest, .cm-shaken.is-on { animation: none; }
 }
+.cm-notice { margin: 0; padding: 8px 12px; border-radius: 12px; background: rgba(120, 230, 180, 0.16); color: var(--mint); font-weight: 800; text-align: center; }
+.cm-email { color: var(--ink); overflow-wrap: anywhere; }
+.cm-fine .cm-link { padding: 0 2px; font-size: inherit; }
+.cm-link:disabled { opacity: 0.5; cursor: default; }

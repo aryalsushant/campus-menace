@@ -6,7 +6,7 @@ import { useGame, getGame, setGame, setPersisted } from './game/core/store';
 import { attachKeyboard, attachTouch } from './game/input/controls';
 import { wireAudio } from './game/audio/wire';
 import { setMuted } from './game/audio/sound';
-import { api } from './lib/api';
+import { api, authLink, clearAuthLink } from './lib/api';
 import { startRun, togglePause, wireFlow, prepareNextRun } from './ui/flow';
 import Landing from './ui/Landing.jsx';
 import Hud from './ui/Hud.jsx';
@@ -22,6 +22,9 @@ export default function App() {
   // auth: session → profile → ready
   useEffect(() => {
     let live = true;
+    if (authLink.error) setGame({ authNotice: { kind: 'bad', text: authLink.error } });
+    else if (authLink.type === 'signup') setGame({ authNotice: { kind: 'good', text: 'Email verified. You’re in!' } });
+    if (authLink.type === 'recovery') setGame({ recovering: true });
     const load = async session => {
       if (!live) return;
       if (!session) {
@@ -36,8 +39,13 @@ export default function App() {
         if (live) setGame({ profile: null, authReady: true });
       }
     };
-    api.session().then(load);
-    const off = api.onAuth(s => {
+    api.session().then(s => {
+      clearAuthLink();
+      load(s);
+    });
+    const off = api.onAuth((s, event) => {
+      if (event === 'PASSWORD_RECOVERY') setGame({ recovering: true });
+      if (event === 'SIGNED_OUT') setGame({ recovering: false });
       if ((s && s.user && s.user.id) !== (getGame().session && getGame().session.user && getGame().session.user.id)) load(s);
     });
     return () => {

@@ -41,6 +41,8 @@ export const useGame = create(set => ({
   session: null,
   profile: null,
   authReady: false,
+  recovering: false, // arrived from a password-reset link
+  authNotice: null, // { kind: 'good' | 'bad', text } shown on the sign-in screens
   stats: null,
   runCount: 0,
   objVersion: 0,
