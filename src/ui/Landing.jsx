@@ -5,6 +5,7 @@ import { useGame, setGame } from '../game/core/store';
 import { api } from '../lib/api';
 import { startRun } from './flow';
 import { Leaderboard } from './Menus';
+import Profile from './Profile.jsx';
 
 const card = {
   initial: { opacity: 0, y: 24, scale: 0.98 },
@@ -153,7 +154,7 @@ function AuthCard() {
       <p className="cm-muted">
         {forgot ? 'We’ll email you a link to choose a new one.' : 'Your score goes on the global leaderboard.'}
       </p>
-      {notice && notice.kind === 'bad' && !signup && !forgot && <p className="cm-error">{notice.text}</p>}
+      {notice && !signup && !forgot && <p className={notice.kind === 'bad' ? 'cm-error' : 'cm-notice'}>{notice.text}</p>}
       <label className="cm-field">
         <span>Email</span>
         <input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
@@ -353,6 +354,7 @@ function ReadyCard() {
   const notice = useGame(s => s.authNotice);
   const [board, setBoard] = useState(null);
   const [showBoard, setShowBoard] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   useEffect(() => {
     let live = true;
     api.myStats().then(s => live && setGame({ stats: s })).catch(() => {});
@@ -400,12 +402,16 @@ function ReadyCard() {
           <button className="cm-link" onClick={() => setShowBoard(true)}>
             Full leaderboard
           </button>
+          <button className="cm-link" onClick={() => setShowProfile(true)}>
+            Profile
+          </button>
           <button className="cm-link" onClick={() => api.signOut()}>
             Sign out
           </button>
         </div>
       </motion.div>
       <AnimatePresence>{showBoard && <Leaderboard onClose={() => setShowBoard(false)} />}</AnimatePresence>
+      <AnimatePresence>{showProfile && <Profile onClose={() => setShowProfile(false)} />}</AnimatePresence>
     </>
   );
 }

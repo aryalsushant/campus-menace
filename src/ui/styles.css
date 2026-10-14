@@ -237,3 +237,30 @@ kbd {
 .cm-email { color: var(--ink); overflow-wrap: anywhere; }
 .cm-fine .cm-link { padding: 0 2px; font-size: inherit; }
 .cm-link:disabled { opacity: 0.5; cursor: default; }
+
+/* profile */
+.cm-card--profile { width: min(460px, 100%); }
+.cm-profile-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); }
+.cm-profile-scroll .cm-muted { overflow-wrap: anywhere; }
+.cm-profile-scroll .cm-muted small { font-weight: 700; font-size: 12.5px; }
+.cm-section { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.cm-section h3 { margin: 0; font-size: 14px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.cm-run-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 4px 8px; border-radius: 8px; font-weight: 800; }
+.cm-run-row:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
+.cm-run-row i { font-style: normal; color: var(--pizza); }
+.cm-run-row small { color: var(--muted); font-weight: 700; min-width: 76px; text-align: right; }
+.cm-btn--small { padding: 9px 14px; font-size: 14px; border-radius: 12px; align-self: flex-start; }
+.cm-btn--small.cm-btn--primary { box-shadow: 0 3px 0 #b8620f; }
+.cm-btn--danger { background: #e2493b; color: #fff; border: 0; box-shadow: 0 3px 0 #8f2017; }
+.cm-inline-form { display: flex; gap: 8px; }
+.cm-inline-form input, .cm-danger-form input {
+  flex: 1; min-width: 0; font: inherit; font-size: 16px; font-weight: 700; color: var(--ink); padding: 9px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); outline: none; user-select: text; -webkit-user-select: text;
+}
+.cm-inline-form input:focus, .cm-danger-form input:focus { border-color: var(--pizza); }
+.cm-danger { margin-top: 4px; }
+.cm-danger-form { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(226, 73, 59, 0.12); border: 1px solid rgba(226, 73, 59, 0.45); }
+.cm-danger-form p { margin: 0; font-size: 14px; font-weight: 700; }
+.cm-danger-form input:focus { border-color: #ff8a7e; }
+.cm-link--danger { color: #ffb4a8; padding-left: 0; }
+.cm-left { text-align: left; }

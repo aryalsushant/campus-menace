@@ -103,6 +103,29 @@ export const api = {
     if (!profileReq) profileReq = loadProfile().finally(() => (profileReq = null));
     return profileReq;
   },
+  async account() {
+    const { data } = await supabase.auth.getUser();
+    return data.user ? { email: data.user.email, createdAt: data.user.created_at } : null;
+  },
+  // Everything stored about the signed-in player, as one JSON-ready object.
+  async exportData() {
+    const { data } = await supabase.auth.getUser();
+    const u = data.user;
+    if (!u) throw new Error('Sign in first.');
+    const profile = unwrap(await supabase.from('profiles').select('*').eq('id', u.id).limit(1))[0] || null;
+    const runs = unwrap(await supabase.from('runs').select('*').eq('user_id', u.id).order('started_at', { ascending: true }));
+    return {
+      exported_at: new Date().toISOString(),
+      account: { id: u.id, email: u.email, created_at: u.created_at, email_confirmed_at: u.email_confirmed_at, last_sign_in_at: u.last_sign_in_at },
+      profile,
+      runs,
+    };
+  },
+  // Deletes the account, profile and every run, then clears the local session.
+  async deleteAccount() {
+    unwrap(await supabase.rpc('delete_my_account'));
+    await supabase.auth.signOut({ scope: 'local' });
+  },
   async usernameAvailable(name) {
     return unwrap(await supabase.rpc('username_available', { p_username: name }));
   },
