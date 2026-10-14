@@ -29,7 +29,6 @@ ul { padding-left: 22px; }
 li { margin: 4px 0; }
 a { color: var(--pizza); overflow-wrap: anywhere; }
 .updated { margin: 0 0 18px; font-size: 14px; }
-.summary { border: 1px solid rgba(255, 200, 69, 0.35); background: rgba(255, 200, 69, 0.08); border-radius: 14px; padding: 4px 18px; }
 table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14.5px; }
 th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 th { color: var(--ink); font-weight: 900; }
