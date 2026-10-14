@@ -47,6 +47,10 @@ export default function Landing() {
         {step === 'username' && <UsernameCard key="username" />}
         {step === 'ready' && <ReadyCard key="ready" />}
       </AnimatePresence>
+      <p className="cm-legal-links">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </p>
     </div>
   );
 }
@@ -192,6 +196,19 @@ function AuthCard() {
       <button className="cm-btn cm-btn--primary" disabled={busy || (signup && (name.bad || name.checking))}>
         {busy ? 'One sec…' : signup ? 'Create account' : forgot ? 'Send reset link' : 'Sign in'}
       </button>
+      {signup && (
+        <p className="cm-fine">
+          By creating an account you confirm you’re 13 or older and agree to the{' '}
+          <a className="cm-link" href="/terms" target="_blank" rel="noopener">
+            Terms
+          </a>{' '}
+          and{' '}
+          <a className="cm-link" href="/privacy" target="_blank" rel="noopener">
+            Privacy Policy
+          </a>
+          .
+        </p>
+      )}
       {signup ? (
         <p className="cm-fine">
           Already have an account?{' '}

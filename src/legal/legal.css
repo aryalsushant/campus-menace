@@ -1,0 +1,40 @@
+:root {
+  --bg: #1b1230;
+  --card: rgba(36, 24, 60, 0.92);
+  --ink: #fff7ec;
+  --muted: rgba(255, 247, 236, 0.72);
+  --line: rgba(255, 255, 255, 0.14);
+  --pizza: #ffc845;
+  --display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --body: 'Nunito', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--body); font-weight: 600; line-height: 1.6;
+  background: radial-gradient(ellipse at 50% -10%, #4a2a6e, var(--bg) 60%) fixed, var(--bg);
+}
+.legal { width: min(760px, 100%); margin: 0 auto; padding: 28px 16px 64px; }
+.legal-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+.legal-logo { white-space: nowrap; font-family: var(--display); font-size: 26px; letter-spacing: 0.02em; color: var(--pizza); text-decoration: none; transform: rotate(-2deg); }
+.legal-logo span { color: #ff6a3d; }
+.legal-back { white-space: nowrap; font-size: 15px; color: var(--muted); font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.legal-card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: clamp(18px, 4vw, 36px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 6vw, 42px); line-height: 1.1; margin: 0 0 4px; }
+h2 { font-size: 19px; font-weight: 900; margin: 30px 0 6px; }
+h3 { font-size: 16px; font-weight: 900; margin: 18px 0 4px; }
+p, li { color: var(--muted); }
+strong, b { color: var(--ink); }
+ul { padding-left: 22px; }
+li { margin: 4px 0; }
+a { color: var(--pizza); overflow-wrap: anywhere; }
+.updated { margin: 0 0 18px; font-size: 14px; }
+.summary { border: 1px solid rgba(255, 200, 69, 0.35); background: rgba(255, 200, 69, 0.08); border-radius: 14px; padding: 4px 18px; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--ink); font-weight: 900; }
+td { color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+.legal-foot { margin-top: 22px; text-align: center; font-size: 14px; color: var(--muted); }
+.legal-foot a { color: var(--muted); font-weight: 800; margin: 0 8px; }
+@media (max-width: 420px) { .legal-logo { font-size: 21px; } .legal-back { font-size: 14px; } }

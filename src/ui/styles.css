@@ -264,3 +264,6 @@ kbd {
 .cm-danger-form input:focus { border-color: #ff8a7e; }
 .cm-link--danger { color: #ffb4a8; padding-left: 0; }
 .cm-left { text-align: left; }
+.cm-legal-links { display: flex; justify-content: center; gap: 14px; margin: 0; font-size: 12.5px; }
+.cm-legal-links a { color: var(--muted); font-weight: 800; }
+.cm-legal-links a:hover { color: var(--ink); }
