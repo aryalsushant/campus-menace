@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useGame, setGame } from '../game/core/store';
 import { api } from '../lib/api';
 import { useUsernameCheck } from './username';
+import { UniversityPicker, saveUniversity, place } from './University';
 
 const overlay = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
 const pop = { initial: { y: 30, scale: 0.96, opacity: 0 }, animate: { y: 0, scale: 1, opacity: 1, transition: { type: 'spring', stiffness: 260, damping: 22 } }, exit: { y: 12, opacity: 0 } };
@@ -86,6 +87,7 @@ export default function Profile({ onClose }) {
           </section>
 
           <ChangeUsername username={profile.username} />
+          <University university={profile.university} />
           <ChangePassword />
           <DataAndDeletion username={profile.username} onDeleted={onClose} />
 
@@ -133,7 +135,7 @@ function ChangeUsername({ username }) {
     setMsg(null);
     try {
       const p = await api.changeUsername(name);
-      setGame({ profile: { id: p.id, username: p.username } });
+      setGame(g => ({ profile: { ...g.profile, username: p.username } }));
       setOpen(false);
       setMsg({ bad: false, text: 'Username changed.' });
     } catch (x) {
@@ -179,6 +181,64 @@ function ChangeUsername({ username }) {
           Cancel
         </button>
       )}
+    </section>
+  );
+}
+
+function University({ university }) {
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const save = async u => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await saveUniversity(u);
+      setOpen(false);
+      setPick(null);
+      setMsg({ bad: false, text: u ? 'University saved.' : 'University removed.' });
+    } catch (x) {
+      setMsg({ bad: true, text: x.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="cm-section">
+      <h3>University</h3>
+      {university && !open && (
+        <div className="cm-uni-current">
+          <b>{university.name}</b>
+          <small>{place(university)}</small>
+        </div>
+      )}
+      {!university && !open && <p className="cm-fine cm-left">Choose your university to unlock its leaderboard.</p>}
+      {open ? (
+        <>
+          <UniversityPicker value={pick} onPick={setPick} autoFocus />
+          <div className="cm-row cm-row--start">
+            <button className="cm-btn cm-btn--primary cm-btn--small" disabled={!pick || busy} onClick={() => save(pick)}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button className="cm-link" onClick={() => (setOpen(false), setPick(null))}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="cm-row cm-row--start">
+          <button className="cm-btn cm-btn--small" onClick={() => (setMsg(null), setOpen(true))}>
+            {university ? 'Change university' : 'Choose university'}
+          </button>
+          {university && (
+            <button className="cm-link" disabled={busy} onClick={() => save(null)}>
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+      {msg && <p className={`cm-hint ${msg.bad ? 'is-bad' : 'is-good'}`}>{msg.text}</p>}
     </section>
   );
 }
@@ -263,7 +323,7 @@ function DataAndDeletion({ username, onDeleted }) {
   return (
     <section className="cm-section">
       <h3>Your data</h3>
-      <p className="cm-fine cm-left">Download a copy of everything we store about you: your email, username, past usernames and every run.</p>
+      <p className="cm-fine cm-left">Download a copy of everything we store about you: your email, username, past usernames, university and every run.</p>
       <button className="cm-btn cm-btn--small" onClick={download} disabled={!!busy}>
         {busy === 'export' ? 'Preparing…' : 'Download my data'}
       </button>

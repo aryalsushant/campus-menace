@@ -6,6 +6,7 @@ import { startRun, startTutorial, needsTutorial, prepareTutorial } from './flow'
 import { Leaderboard } from './Menus';
 import Profile from './Profile.jsx';
 import { useUsernameCheck } from './username';
+import { UniversityPicker, saveUniversity, needsUniversity, markUniversityAsked } from './University';
 
 const card = {
   initial: { opacity: 0, y: 24, scale: 0.98 },
@@ -27,7 +28,8 @@ export default function Landing() {
   const session = useGame(s => s.session);
   const profile = useGame(s => s.profile);
   const recovering = useGame(s => s.recovering);
-  const step = !authReady ? 'loading' : !session ? 'auth' : recovering ? 'newpass' : !profile ? 'username' : 'ready';
+  const askUniversity = useGame(s => needsUniversity(s));
+  const step = !authReady ? 'loading' : !session ? 'auth' : recovering ? 'newpass' : !profile ? 'username' : askUniversity ? 'university' : 'ready';
   return (
     <div className="cm-landing">
       <div className="cm-landing-top">
@@ -45,6 +47,7 @@ export default function Landing() {
         {step === 'auth' && <AuthCard key="auth" />}
         {step === 'newpass' && <NewPasswordCard key="newpass" />}
         {step === 'username' && <UsernameCard key="username" />}
+        {step === 'university' && <UniversityCard key="university" />}
         {step === 'ready' && <ReadyCard key="ready" />}
       </AnimatePresence>
       <p className="cm-legal-links">
@@ -311,6 +314,39 @@ function UsernameCard() {
       <button type="button" className="cm-link" onClick={() => api.signOut()}>
         Sign out
       </button>
+    </motion.form>
+  );
+}
+
+function UniversityCard() {
+  const [pick, setPick] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async e => {
+    e.preventDefault();
+    if (!pick) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await saveUniversity(pick);
+    } catch (x) {
+      setErr(x.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <motion.form className="cm-card cm-card--university" {...card} onSubmit={submit}>
+      <h2>Where do you go to school?</h2>
+      <p className="cm-muted">Optional. Pick your university to get its own leaderboard next to the global one.</p>
+      <UniversityPicker value={pick} onPick={setPick} autoFocus />
+      {err && <p className="cm-error">{err}</p>}
+      <button className="cm-btn cm-btn--primary" disabled={!pick || busy}>
+        {busy ? 'Saving…' : 'Join its leaderboard'}
+      </button>
+      <button type="button" className="cm-link" onClick={markUniversityAsked}>
+        Skip for now
+      </button>
+      <p className="cm-fine">You can change this any time from your profile.</p>
     </motion.form>
   );
 }
