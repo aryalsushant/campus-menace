@@ -1,8 +1,9 @@
-import { runtime, startWorld, prepareWorld } from '../game/core/runtime';
+import { runtime, startWorld, prepareWorld, prepareTutorialWorld } from '../game/core/runtime';
+import { createTutorial } from '../game/core/tutorial';
 import { prebuildWorld } from '../game/render/chunks';
 import { getGame, setGame } from '../game/core/store';
 import { on } from '../game/core/bus';
-import { readInput, clearInput, enableTilt, calibrateTilt } from '../game/input/controls';
+import { readInput, clearInput, enableTilt, calibrateTilt, tiltAvailable } from '../game/input/controls';
 import { initAudio, setMuted, startMusic, sfx } from '../game/audio/sound';
 import { randomSeed } from '../game/sim/rng';
 import { api } from '../lib/api';
@@ -12,21 +13,22 @@ import { api } from '../lib/api';
 let runToken = null; // { id, promise }
 let overTimer = null;
 
-export async function startRun() {
+// New players (no runs yet, tutorial never finished or skipped) learn the
+// controls first. Their stats must have loaded so returning players never see it.
+export function needsTutorial(g = getGame()) {
+  if (!g.profile || g.tutorialDone || !g.stats) return false;
+  const meta = g.session && g.session.user && g.session.user.user_metadata;
+  if (meta && meta.tutorial_done) return false;
+  return !(g.stats.total_runs > 0);
+}
+
+export async function startRun(opts = {}) {
   const g = getGame();
-  if (g.phase === 'playing' || !g.profile) return;
-  initAudio();
-  setMuted(g.muted);
-  sfx.start();
-  startMusic();
-  if (g.touch && g.steerMode === 'tilt') {
-    const ok = await enableTilt();
-    if (!ok) setGame({ steerMode: 'drag' });
-  }
-  clearTimeout(overTimer);
-  clearInput();
-  // Space throws now: make sure no button keeps focus during the run
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if ((g.phase === 'playing' && !opts.fromTutorial) || !g.profile) return;
+  if (!opts.fromTutorial && needsTutorial(g)) return startTutorial();
+  runtime.tutorial = null;
+  if (getGame().tutorial) setGame({ tutorial: null });
+  await beginPlay(g);
   // use the world prepared in the background, if there is one
   const seed = runtime.nextWorld ? runtime.nextWorld.seed : randomSeed() & 0x7fffffff;
   startWorld('play', seed);
@@ -43,8 +45,55 @@ export async function startRun() {
   setTimeout(calibrateTilt, 120);
 }
 
+// A practice world nothing can end; nothing is submitted.
+export async function startTutorial() {
+  const g = getGame();
+  if (!g.profile) return;
+  await beginPlay(g);
+  startWorld('play', undefined, { tutorial: true });
+  const tut = createTutorial({ touch: g.touch });
+  runtime.tutorial = tut;
+  runtime.input = readInput;
+  runToken = null;
+  setGame({ phase: 'playing', paused: false, result: null });
+  tut.start(runtime.world);
+  setTimeout(calibrateTilt, 120);
+}
+
+// Finish or skip the tutorial: remember it, then start a real run or go back.
+export function endTutorial(next) {
+  if (!getGame().tutorialDone) {
+    setGame({ tutorialDone: true });
+    api.markTutorialDone().catch(() => {});
+  }
+  runtime.tutorial = null;
+  setGame({ tutorial: null });
+  if (next === 'run') startRun({ fromTutorial: true });
+  else backToMenu();
+}
+
+// steering label for touch: tilt only if the phone actually reports it
+export const usesTilt = () => getGame().steerMode === 'tilt' && tiltAvailable();
+
+async function beginPlay(g) {
+  initAudio();
+  setMuted(g.muted);
+  sfx.start();
+  startMusic();
+  if (g.touch && g.steerMode === 'tilt') {
+    const ok = await enableTilt();
+    if (!ok) setGame({ steerMode: 'drag' });
+  }
+  clearTimeout(overTimer);
+  clearInput();
+  // Space throws now: make sure no button keeps focus during the run
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+
 export function backToMenu() {
   clearTimeout(overTimer);
+  runtime.tutorial = null;
+  if (getGame().tutorial) setGame({ tutorial: null });
   runtime.input = null;
   startWorld('attract');
   prepareNextRun();
@@ -102,6 +151,11 @@ async function submit(result) {
 
 export function prepareNextRun() {
   if (!runtime.nextWorld) prebuildWorld(prepareWorld());
+}
+
+// build the tutorial's campus ahead so it starts without pop-in
+export function prepareTutorial() {
+  if (!runtime.nextTutorial) prebuildWorld(prepareTutorialWorld());
 }
 
 export { clearInput };

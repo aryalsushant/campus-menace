@@ -17,6 +17,7 @@ export default function Hud() {
   const shaken = useGame(s => s.shaken);
   const touch = useGame(s => s.touch);
   const runCount = useGame(s => s.runCount);
+  const inTutorial = useGame(s => !!s.tutorial);
   const [bump, setBump] = useState(0);
   const distRef = useRef();
   useEffect(() => {
@@ -76,7 +77,7 @@ export default function Hud() {
         </div>
       </div>
       <Callouts />
-      {runCount <= 2 && <ControlsHint touch={touch} />}
+      {runCount <= 2 && !inTutorial && <ControlsHint touch={touch} />}
     </div>
   );
 }

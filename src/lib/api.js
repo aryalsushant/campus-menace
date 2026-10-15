@@ -93,6 +93,9 @@ export const api = {
   async setPassword(password) {
     unwrap(await supabase.auth.updateUser({ password }));
   },
+  async markTutorialDone() {
+    unwrap(await supabase.auth.updateUser({ data: { tutorial_done: true } }));
+  },
   async signOut() {
     await supabase.auth.signOut();
   },

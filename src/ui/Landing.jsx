@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 import { useGame, setGame } from '../game/core/store';
 import { api } from '../lib/api';
-import { startRun } from './flow';
+import { startRun, startTutorial, needsTutorial, prepareTutorial } from './flow';
 import { Leaderboard } from './Menus';
 import Profile from './Profile.jsx';
 
@@ -380,6 +380,11 @@ function ReadyCard() {
       live = false;
     };
   }, []);
+  const firstTime = useGame(s => needsTutorial(s));
+  // new players get the tutorial: build its campus while this screen shows
+  useEffect(() => {
+    if (firstTime) prepareTutorial();
+  }, [firstTime]);
   useEffect(() => {
     if (!notice) return undefined;
     const t = setTimeout(() => setGame({ authNotice: null }), 5000);
@@ -403,7 +408,7 @@ function ReadyCard() {
           <span className="cm-start-pulse" />
           {touch ? 'TAP TO RUN' : 'PRESS ENTER TO RUN'}
         </button>
-        <Controls touch={touch} />
+        {firstTime ? <p className="cm-fine">First time? A quick tutorial shows you the controls.</p> : <Controls touch={touch} />}
         {board && board.length > 0 && (
           <div className="cm-mini-board">
             {board.slice(0, 5).map(r => (
@@ -421,6 +426,9 @@ function ReadyCard() {
           </button>
           <button className="cm-link" onClick={() => setShowProfile(true)}>
             Profile
+          </button>
+          <button className="cm-link" onClick={() => startTutorial()}>
+            Tutorial
           </button>
           <button className="cm-link" onClick={() => api.signOut()}>
             Sign out

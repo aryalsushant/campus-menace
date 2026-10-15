@@ -10,6 +10,7 @@ import { api, authLink, clearAuthLink } from './lib/api';
 import { startRun, togglePause, wireFlow, prepareNextRun } from './ui/flow';
 import Landing from './ui/Landing.jsx';
 import Hud from './ui/Hud.jsx';
+import Tutorial from './ui/Tutorial.jsx';
 import { PauseMenu, GameOver } from './ui/Menus.jsx';
 
 export default function App() {
@@ -95,6 +96,7 @@ export default function App() {
       {phase === 'landing' && <div className="cm-scrim" />}
       {phase === 'landing' && <Landing />}
       {(phase === 'playing' || phase === 'over') && <Hud />}
+      {phase === 'playing' && <Tutorial />}
       <AnimatePresence>{phase === 'playing' && paused && <PauseMenu key="pause" />}</AnimatePresence>
       <AnimatePresence>{phase === 'over' && <GameOver key="over" />}</AnimatePresence>
       <button className="cm-mute" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setPersisted({ muted: !muted })}>

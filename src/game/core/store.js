@@ -41,6 +41,8 @@ export const useGame = create(set => ({
   session: null,
   profile: null,
   authReady: false,
+  tutorial: null, // { step, total, status, lesson, missed } while the tutorial runs
+  tutorialDone: false,
   recovering: false, // arrived from a password-reset link
   authNotice: null, // { kind: 'good' | 'bad', text } shown on the sign-in screens
   stats: null,
