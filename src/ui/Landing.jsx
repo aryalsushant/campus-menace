@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 import { useGame, setGame } from '../game/core/store';
 import { api } from '../lib/api';
 import { startRun, startTutorial, needsTutorial, prepareTutorial } from './flow';
 import { Leaderboard } from './Menus';
 import Profile from './Profile.jsx';
+import { useUsernameCheck } from './username';
 
 const card = {
   initial: { opacity: 0, y: 24, scale: 0.98 },
@@ -273,51 +273,6 @@ function NewPasswordCard() {
   );
 }
 
-const matcher = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
-const RESERVED = ['admin', 'administrator', 'moderator', 'mod', 'support', 'campusmenace', 'campus_menace', 'official', 'staff', 'system', 'root', 'null', 'undefined'];
-
-function usernameProblem(name) {
-  if (!name) return 'Pick a username.';
-  if (!/^[A-Za-z0-9_]*$/.test(name)) return 'Letters, numbers and underscores only.';
-  if (name.length < 3) return 'At least 3 characters.';
-  if (name.length > 16) return 'At most 16 characters.';
-  if (matcher.hasMatch(name.replace(/_/g, ' ')) || matcher.hasMatch(name)) return 'Pick something friendlier.';
-  if (RESERVED.includes(name.toLowerCase())) return 'That username is reserved.';
-  return '';
-}
-
-// Live format + availability check for a username field.
-function useUsernameCheck(name) {
-  const [remote, setRemote] = useState({ checking: false, available: null, msg: '' });
-  const seq = useRef(0);
-  const local = useMemo(() => (name ? usernameProblem(name) : ''), [name]);
-  useEffect(() => {
-    if (!name || local) {
-      setRemote({ checking: false, available: null, msg: '' });
-      return undefined;
-    }
-    const id = ++seq.current;
-    setRemote(s => ({ ...s, checking: true }));
-    const t = setTimeout(async () => {
-      try {
-        const ok = await api.usernameAvailable(name);
-        if (id === seq.current) setRemote({ checking: false, available: ok, msg: ok ? 'Available' : 'Taken' });
-      } catch (x) {
-        if (id === seq.current) setRemote({ checking: false, available: null, msg: x.message });
-      }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [name, local]);
-  const bad = !!local || remote.available === false;
-  return {
-    bad,
-    good: !bad && remote.available === true,
-    checking: remote.checking,
-    problem: usernameProblem(name) || (remote.available === false ? 'That username is taken.' : ''),
-    text: local || (remote.checking ? 'Checking…' : remote.msg),
-  };
-}
-
 function UsernameCard() {
   const session = useGame(s => s.session);
   const wanted = (session && session.user && session.user.user_metadata && session.user.user_metadata.username) || '';
@@ -343,7 +298,7 @@ function UsernameCard() {
     <motion.form className="cm-card" {...card} onSubmit={submit}>
       <h2>Pick your username</h2>
       <p className="cm-muted">
-        {wanted ? `“${wanted}” isn’t available any more. Pick another one.` : 'This is how you show up on the leaderboard. You can’t change it later.'}
+        {wanted ? `“${wanted}” isn’t available any more. Pick another one.` : 'This is how you show up on the leaderboard. You can change it from your profile later.'}
       </p>
       <label className="cm-field">
         <span>Username</span>
@@ -379,7 +334,7 @@ function ReadyCard() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [profile.username]); // reload after a rename so the board shows the new name
   const firstTime = useGame(s => needsTutorial(s));
   // new players get the tutorial: build its campus while this screen shows
   useEffect(() => {
