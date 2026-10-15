@@ -337,3 +337,28 @@ kbd {
   .cm-tut-card p { font-size: 15px; }
   .cm-gesture { transform: scale(0.8); margin: -6px 0; }
 }
+
+/* university picker */
+.cm-uni { display: flex; flex-direction: column; gap: 6px; }
+.cm-uni input {
+  font: inherit; font-size: 16px; font-weight: 700; color: var(--ink); padding: 11px 14px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); outline: none; user-select: text; -webkit-user-select: text;
+}
+.cm-uni input:focus { border-color: var(--pizza); box-shadow: 0 0 0 3px rgba(255, 200, 69, 0.25); }
+.cm-uni-list {
+  list-style: none; margin: 0; padding: 4px; max-height: 232px; overflow-y: auto; border-radius: 12px;
+  background: rgba(20, 13, 36, 0.96); border: 1px solid var(--line); overscroll-behavior: contain;
+}
+.cm-uni-list li { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 9px; cursor: pointer; text-align: left; }
+.cm-uni-list li b { font-weight: 800; font-size: 14.5px; }
+.cm-uni-list li small { color: var(--muted); font-weight: 700; font-size: 12px; }
+.cm-uni-list li.is-active { background: rgba(255, 200, 69, 0.16); }
+.cm-uni-list .cm-uni-empty { color: var(--muted); font-weight: 700; cursor: default; }
+.cm-uni-current { display: flex; flex-direction: column; gap: 1px; text-align: left; }
+.cm-uni-current b { font-weight: 800; }
+.cm-uni-current small { color: var(--muted); font-weight: 700; font-size: 12.5px; }
+.cm-board-scope { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-unlock { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: rgba(255, 200, 69, 0.08); border: 1px dashed rgba(255, 200, 69, 0.45); }
+.cm-unlock p { margin: 0; font-weight: 700; text-align: left; }
+.cm-unlock .cm-btn { align-self: stretch; }
+.cm-row--start { justify-content: flex-start; align-items: center; gap: 14px; }

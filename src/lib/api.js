@@ -44,17 +44,20 @@ function friendly(error) {
 }
 
 let profileReq = null;
+const PROFILE = 'id, username, university:universities(id, name, city, state)';
+let universityList = null;
 
 async function loadProfile() {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return null;
-  const rows = unwrap(await supabase.from('profiles').select('id, username').eq('id', u.user.id).limit(1));
+  const rows = unwrap(await supabase.from('profiles').select(PROFILE).eq('id', u.user.id).limit(1));
   if (rows[0]) return rows[0];
   // first sign-in after confirming: claim the username picked at sign-up
   const wanted = u.user.user_metadata && u.user.user_metadata.username;
   if (!wanted) return null;
   try {
-    return unwrap(await supabase.rpc('claim_username', { p_username: wanted }));
+    const p = unwrap(await supabase.rpc('claim_username', { p_username: wanted }));
+    return { id: p.id, username: p.username, university: null };
   } catch {
     return null; // taken meanwhile: the username screen asks again
   }
@@ -93,6 +96,10 @@ export const api = {
   async setPassword(password) {
     unwrap(await supabase.auth.updateUser({ password }));
   },
+  // the university picker shows once after the first sign-in, picked or not
+  async markUniversityAsked() {
+    unwrap(await supabase.auth.updateUser({ data: { university_asked: true } }));
+  },
   async markTutorialDone() {
     unwrap(await supabase.auth.updateUser({ data: { tutorial_done: true } }));
   },
@@ -115,7 +122,7 @@ export const api = {
     const { data } = await supabase.auth.getUser();
     const u = data.user;
     if (!u) throw new Error('Sign in first.');
-    const profile = unwrap(await supabase.from('profiles').select('*').eq('id', u.id).limit(1))[0] || null;
+    const profile = unwrap(await supabase.from('profiles').select('*, university:universities(name, city, state)').eq('id', u.id).limit(1))[0] || null;
     const runs = unwrap(await supabase.from('runs').select('*').eq('user_id', u.id).order('started_at', { ascending: true }));
     const usernameChanges = unwrap(await supabase.from('username_changes').select('old_username, new_username, changed_at').eq('user_id', u.id).order('changed_at', { ascending: true }));
     return {
@@ -135,7 +142,26 @@ export const api = {
     return unwrap(await supabase.rpc('username_available', { p_username: name }));
   },
   async claimUsername(name) {
-    return unwrap(await supabase.rpc('claim_username', { p_username: name }));
+    const p = unwrap(await supabase.rpc('claim_username', { p_username: name }));
+    return { id: p.id, username: p.username, university: null };
+  },
+  // [id, name, city, state, alias] for every US university, loaded once
+  universities() {
+    if (!universityList)
+      universityList = fetch('/universities.json')
+        .then(r => {
+          if (!r.ok) throw new Error('Couldn’t load the university list.');
+          return r.json();
+        })
+        .catch(x => {
+          universityList = null;
+          throw x;
+        });
+    return universityList;
+  },
+  // null clears it
+  async setUniversity(id) {
+    unwrap(await supabase.rpc('set_university', { p_university: id }));
   },
   // renames are limited to two in any seven days
   async changeUsername(name) {
@@ -165,8 +191,8 @@ export const api = {
     return { status: x.result_status, best: x.best_score, rank: x.best_rank, newBest: x.new_best };
   },
 
-  async leaderboard(period = 'all') {
-    return unwrap(await supabase.rpc('get_leaderboard', { p_period: period, p_limit: 50 }));
+  async leaderboard(period = 'all', university = null) {
+    return unwrap(await supabase.rpc('get_leaderboard', { p_period: period, p_limit: 50, p_university: university }));
   },
   async myStats() {
     const rows = unwrap(await supabase.rpc('get_my_stats'));

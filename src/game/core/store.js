@@ -43,6 +43,7 @@ export const useGame = create(set => ({
   authReady: false,
   tutorial: null, // { step, total, status, lesson, missed } while the tutorial runs
   tutorialDone: false,
+  universityAsked: false, // the first-sign-in university picker was shown
   recovering: false, // arrived from a password-reset link
   authNotice: null, // { kind: 'good' | 'bad', text } shown on the sign-in screens
   stats: null,
