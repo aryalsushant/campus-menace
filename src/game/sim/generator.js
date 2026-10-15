@@ -55,7 +55,10 @@ function jumpReach(v, dh) {
   return v * ((vj + Math.sqrt(disc)) / g);
 }
 
-export function createGenerator(seed) {
+export function createGenerator(seed, opts = {}) {
+  // tutorial: flat, straight sections and plain bridges with nothing in them;
+  // the tutorial places each lesson's obstacle itself (see lesson())
+  const tutorial = !!opts.tutorial;
   const rng = createRng(seed);
   let segId = 1;
   let objId = 1;
@@ -153,19 +156,19 @@ export function createGenerator(seed) {
     const stage = stageAt(s0);
     const D = difficultyAt(s0);
     const plaza = stage === 0 && !first && rng.chance(0.18);
-    const w = first ? 5.4 : plaza ? rng.range(6.6, 7.4) : [rng.range(5, 5.8), rng.range(4.4, 5.2), rng.range(3.9, 4.7)][stage];
-    const len = first ? 190 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
+    const w = first || tutorial ? 5.4 : plaza ? rng.range(6.6, 7.4) : [rng.range(5, 5.8), rng.range(4.4, 5.2), rng.range(3.9, 4.7)][stage];
+    const len = tutorial ? 170 : first ? 190 : Math.round(rng.range(lerp(110, 80, D), lerp(150, 120, D)));
     const s1 = s0 + len;
     cur = { s0, s1 };
 
     // centreline: 2-3 pieces, gentle curves biased back toward the start heading
-    const nPieces = first ? 1 : rng.int(2, 3);
+    const nPieces = first || tutorial ? 1 : rng.int(2, 3);
     let left = len;
     for (let i = 0; i < nPieces; i++) {
       const pl = i === nPieces - 1 ? left : Math.round(left * rng.range(0.3, 0.55));
       left -= pl;
       let k = 0;
-      if (!first && rng.chance(0.65)) {
+      if (!first && !tutorial && rng.chance(0.65)) {
         const h = world.track.end.h;
         const sign = Math.abs(h) > 0.55 ? -Math.sign(h) : rng.sign();
         k = sign * rng.range(1 / 190, 1 / 75);
@@ -176,7 +179,7 @@ export function createGenerator(seed) {
     // elevation: flat, or with a ramp (stairs) in the middle
     const y0 = state.y;
     const parts = [];
-    const ramp = !first && rng.chance(stage === 0 ? 0.28 : 0.35) && len > 90;
+    const ramp = !first && !tutorial && rng.chance(stage === 0 ? 0.28 : 0.35) && len > 90;
     if (ramp) {
       const r0 = s0 + Math.round(len * rng.range(0.3, 0.45));
       const rl = 12;
@@ -198,6 +201,13 @@ export function createGenerator(seed) {
       for (const p of parts) if (s >= p.s0 && s <= p.s1) return p.y0 + (p.y1 - p.y0) * ((s - p.s0) / Math.max(1e-6, p.s1 - p.s0));
       return state.y;
     };
+
+    if (tutorial) {
+      state.genS = s1;
+      state.sections++;
+      seg.yEnd = state.y;
+      return;
+    }
 
     // vending machine checkpoints
     if (s0 + 8 >= state.nextVend) {
@@ -496,7 +506,7 @@ export function createGenerator(seed) {
   function crossing(world) {
     const s0 = state.genS;
     const stage = stageAt(s0);
-    let type = state.sections === 1 ? 'bridge' : rng.weighted(availableCross(s0, stage));
+    let type = state.sections === 1 || tutorial ? 'bridge' : rng.weighted(availableCross(s0, stage));
     // keep heights in a sensible band
     if (type === 'drop' && state.y < -10) type = stage === 2 ? 'bounce' : 'gap';
     seenCross.add(type);
@@ -518,7 +528,7 @@ export function createGenerator(seed) {
         const narrow = type === 'narrow';
         len = Math.round(rng.range(22, narrow ? 34 : 44));
         const hw = narrow ? 1.25 : rng.range(2.1, 2.6);
-        const slope = narrow ? 0 : rng.chance(0.4) ? rng.range(-1.2, 1.2) : 0;
+        const slope = narrow || tutorial ? 0 : rng.chance(0.4) ? rng.range(-1.2, 1.2) : 0;
         y1 = y0 + slope;
         pad({ s0, s1: s0 + len, dl: -hw, dr: hw, y0, y1, kind: 'bridge' });
         world.surfaces.addWall({ s0, s1: s0 + len, dl: -hw, dr: hw });
@@ -650,7 +660,34 @@ export function createGenerator(seed) {
     }
   }
 
-  return { generateUntil, state };
+  // One tutorial lesson's obstacle, placed at s in front of a runner at d.
+  // Returns what the tutorial needs to judge it.
+  function lesson(world, type, s, d) {
+    const w = 5.4;
+    const y = state.y;
+    const before = world.obstacles.length;
+    if (type === 'steer') {
+      const c = clamp(d, -w + 2.9, w - 2.9);
+      fillTall(world, s, c - 1.1, c + 1.1, 'trashcan', y);
+      pizzaLine(world, s - 8, s + 6, () => clamp(c - 2.1, -w + 0.8, w - 0.8), () => y + 1, 2.2);
+      pizzaLine(world, s - 8, s + 6, () => clamp(c + 2.1, -w + 0.8, w - 0.8), () => y + 1, 2.2);
+      return { obstacles: world.obstacles.slice(before), from: c - 1.1, to: c + 1.1 };
+    }
+    if (type === 'jump') {
+      BEATS.lowWall(world, s, 30, w, () => y, 0);
+      return { obstacles: world.obstacles.slice(before) };
+    }
+    if (type === 'slide') {
+      BEATS.banner(world, s, 30, w, () => y, 0);
+      return { obstacles: world.obstacles.slice(before) };
+    }
+    // throw: a slow rider coming straight down the runner's line
+    const rd = clamp(d, -w + 0.8, w - 0.8);
+    addRider(world, { kind: 'oncoming', meet: s - 30, s, d: rd, vs: -6, minS: s - 90, maxS: s + 1, amp: 0, freq: 0 });
+    return { riderId: world.plannedRiders[world.plannedRiders.length - 1].id };
+  }
+
+  return { generateUntil, state, lesson };
 }
 
 export { BEAT_UNLOCK, CROSS_UNLOCK, jumpReach };

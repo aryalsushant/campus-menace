@@ -7,9 +7,10 @@ import { STEP, RUN, CANS, RIDER, POWER, COMBO, speedAt, stageAt } from './tune';
 const AHEAD = 320; // generate this far ahead of the runner
 const BEHIND = 60; // keep this much behind for the camera
 
-export function createWorld(seed) {
+export function createWorld(seed, opts = {}) {
   const world = {
     seed,
+    practice: !!opts.tutorial, // tutorial: nothing can end the run
     t: 0,
     track: createTrack(),
     surfaces: createSurfaces(),
@@ -34,7 +35,7 @@ export function createWorld(seed) {
     slowmo: 0, // seconds of slow motion remaining (render uses it to scale time)
   };
   world.emit = (type, data = {}) => world.events.push({ type, t: world.t, ...data });
-  world.gen = createGenerator(seed);
+  world.gen = createGenerator(seed, opts);
   world.gen.generateUntil(world, AHEAD);
   return world;
 }
@@ -120,6 +121,12 @@ function prune(world, s) {
 function hurt(world, cause, src) {
   const r = world.runner;
   if (r.invT > 0 || world.power.coffee > 0) return 'ignored';
+  if (world.practice) {
+    r.stumbleT = RUN.stumbleTime;
+    r.slideT = 0;
+    world.emit('stumble', { model: src && src.model, dropped: 0 });
+    return 'stumble';
+  }
   if (world.power.hoodie) {
     world.power.hoodie = false;
     r.invT = RUN.invulnAfterShield;
