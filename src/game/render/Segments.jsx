@@ -121,7 +121,7 @@ export default function Segments() {
     if (root.current) root.current.position.set(-runtime.origin.x, 0, -runtime.origin.z);
   }, -20);
   useEffect(() => {
-    releaseChunks([runtime.world, runtime.nextWorld]);
+    releaseChunks([runtime.world, runtime.nextWorld, runtime.nextTutorial]);
   });
   const segs = world ? world.segments : [];
   return (

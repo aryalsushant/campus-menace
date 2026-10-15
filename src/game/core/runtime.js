@@ -21,6 +21,8 @@ export const runtime = {
   startedAt: 0,
   runId: null,
   nextWorld: null,
+  nextTutorial: null, // a tutorial world built ahead for players who haven't done it
+  tutorial: null, // the running tutorial controller, if any
   // floating origin: the scene is drawn relative to this point so float32
   // stays precise on long runs (the sim itself keeps absolute coordinates)
   origin: { x: 0, z: 0 },
@@ -53,9 +55,18 @@ export function prepareWorld(seed = randomSeed() & 0x7fffffff) {
   return runtime.nextWorld;
 }
 
-export function startWorld(mode, seed) {
+export function prepareTutorialWorld(seed = randomSeed() & 0x7fffffff) {
+  runtime.nextTutorial = createWorld(seed, { tutorial: true });
+  return runtime.nextTutorial;
+}
+
+export function startWorld(mode, seed, opts = {}) {
   const next = runtime.nextWorld;
-  if (mode === 'play' && next && (seed == null || seed === next.seed)) {
+  runtime.tutorial = null;
+  if (opts.tutorial) {
+    runtime.world = runtime.nextTutorial || createWorld(seed ?? randomSeed(), { tutorial: true });
+    runtime.nextTutorial = null;
+  } else if (mode === 'play' && next && (seed == null || seed === next.seed)) {
     runtime.world = next;
     runtime.nextWorld = null;
   } else runtime.world = createWorld(seed ?? randomSeed());
@@ -92,6 +103,17 @@ export function tick(dt) {
   if (!w) return;
   const g = getGame();
   if (g.paused) return;
+  // the tutorial freezes the game until the player makes the move it asks for
+  const tut = runtime.mode === 'play' ? runtime.tutorial : null;
+  if (tut && tut.hold) {
+    tut.poll(runtime.input ? runtime.input() : blank);
+    if (tut.hold) {
+      runtime.timeScale = 0;
+      runtime.acc = 0;
+      return;
+    }
+    runtime.timeScale = 1;
+  }
   // slow motion after takedowns, eased back
   const target = w.slowmo > 0 ? 0.32 : 1;
   runtime.timeScale += (target - runtime.timeScale) * Math.min(1, dt * (target < runtime.timeScale ? 30 : 6));
@@ -99,17 +121,19 @@ export function tick(dt) {
   let steps = 0;
   while (runtime.acc >= STEP && steps < 6) {
     snapshot(w);
-    const inp = w.over ? blank : runtime.mode === 'attract' ? runtime.bot.think(w) : runtime.input ? runtime.input() : blank;
+    let inp = w.over ? blank : runtime.mode === 'attract' ? runtime.bot.think(w) : runtime.input ? runtime.input() : blank;
+    if (tut) inp = tut.filter(inp, w);
     const segCount = w.segments.length;
     const firstSeg = w.segments[0] && w.segments[0].id;
     const objCount = w.obstacles.length + w.vending.length;
     stepWorld(w, inp);
+    if (tut) tut.update(w);
     runtime.acc -= STEP;
     steps++;
     if (w.segments.length !== segCount || (w.segments[0] && w.segments[0].id) !== firstSeg) setGame({ segVersion: getGame().segVersion + 1 });
     if (w.obstacles.length + w.vending.length !== objCount) setGame({ objVersion: getGame().objVersion + 1 });
     for (const e of drainEvents(w)) emit(e.type, e);
-    if (w.over) break;
+    if (w.over || (tut && tut.hold)) break;
   }
   if (steps === 6) runtime.acc = 0;
   runtime.alpha = runtime.acc / STEP;
