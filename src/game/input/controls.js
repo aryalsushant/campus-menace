@@ -16,6 +16,7 @@ const st = {
   slidePressed: false,
   throwPressed: false,
   throwTarget: null,
+  steerTap: 0, // last ←/→ press, so even a tap shorter than a frame registers
   touchJumpHeld: 0,
   tilt: 0,
   tiltNeutral: null,
@@ -43,7 +44,9 @@ export function readInput() {
     sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'),
     throwPressed: st.throwPressed,
     throwTarget: st.throwTarget,
+    steerTap: st.steerTap,
   };
+  st.steerTap = 0;
   st.jumpPressed = false;
   st.slidePressed = false;
   st.throwPressed = false;
@@ -55,6 +58,7 @@ export function readInput() {
 export function clearInput() {
   keys.clear();
   st.jumpPressed = st.slidePressed = st.throwPressed = false;
+  st.steerTap = 0;
   st.touchJumpHeld = 0;
   st.drag = 0;
 }
@@ -86,6 +90,8 @@ export function attachKeyboard(onAction) {
     }
     keys.add(c);
     if (e.repeat) return;
+    if (LEFT.includes(c)) st.steerTap = -1;
+    if (RIGHT.includes(c)) st.steerTap = 1;
     if (JUMP.includes(c)) st.jumpPressed = true;
     if (SLIDE.includes(c)) st.slidePressed = true;
     if (THROW.includes(c)) st.throwPressed = true;
@@ -183,8 +189,10 @@ function riderAtScreen(x, y) {
 
 export function attachTouch(el) {
   let t0 = null;
+  // taps on buttons (pause, tutorial) are not throws
+  const onUi = e => e.target && e.target.closest && e.target.closest('button, a, input, select, label');
   const start = e => {
-    if (getGame().phase !== 'playing' || getGame().paused) return;
+    if (getGame().phase !== 'playing' || getGame().paused || onUi(e)) return;
     const t = e.changedTouches[0];
     t0 = { id: t.identifier, x: t.clientX, y: t.clientY, time: performance.now(), swiped: false, lastX: t.clientX };
   };
@@ -227,7 +235,7 @@ export function attachTouch(el) {
   el.addEventListener('touchcancel', end);
   // a mouse click on a rider also throws at it
   const click = e => {
-    if (getGame().phase !== 'playing' || getGame().paused || getGame().touch) return;
+    if (getGame().phase !== 'playing' || getGame().paused || getGame().touch || onUi(e)) return;
     const rd = riderAtScreen(e.clientX, e.clientY);
     if (rd) {
       st.throwPressed = true;
