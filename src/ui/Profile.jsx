@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { useGame, setGame } from '../game/core/store';
 import { api } from '../lib/api';
+import { useUsernameCheck } from './username';
 
 const overlay = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
 const pop = { initial: { y: 30, scale: 0.96, opacity: 0 }, animate: { y: 0, scale: 1, opacity: 1, transition: { type: 'spring', stiffness: 260, damping: 22 } }, exit: { y: 12, opacity: 0 } };
@@ -84,6 +85,7 @@ export default function Profile({ onClose }) {
               ))}
           </section>
 
+          <ChangeUsername username={profile.username} />
           <ChangePassword />
           <DataAndDeletion username={profile.username} onDeleted={onClose} />
 
@@ -104,6 +106,80 @@ export default function Profile({ onClose }) {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+const when = iso => new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+function ChangeUsername({ username }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(username);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [quota, setQuota] = useState(null);
+  const check = useUsernameCheck(open ? name : '', username);
+  useEffect(() => {
+    let live = true;
+    api.usernameChanges().then(q => live && setQuota(q)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  const left = quota ? quota.remaining : null;
+  const submit = async e => {
+    e.preventDefault();
+    if (check.problem) return setMsg({ bad: true, text: check.problem });
+    setBusy(true);
+    setMsg(null);
+    try {
+      const p = await api.changeUsername(name);
+      setGame({ profile: { id: p.id, username: p.username } });
+      setOpen(false);
+      setMsg({ bad: false, text: 'Username changed.' });
+    } catch (x) {
+      setMsg({ bad: true, text: x.message });
+    } finally {
+      setBusy(false);
+      api.usernameChanges().then(setQuota).catch(() => {});
+    }
+  };
+  const cancel = () => {
+    setOpen(false);
+    setName(username);
+    setMsg(null);
+  };
+  return (
+    <section className="cm-section">
+      <h3>Username</h3>
+      {open ? (
+        <form className="cm-inline-form" onSubmit={submit}>
+          <input autoFocus maxLength={16} autoComplete="off" spellCheck={false} value={name} onChange={e => setName(e.target.value)} aria-label="New username" />
+          <button className="cm-btn cm-btn--primary cm-btn--small" disabled={busy || !name || name === username || check.bad || check.checking}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </form>
+      ) : (
+        <button className="cm-btn cm-btn--small" disabled={left === 0} onClick={() => (setName(username), setMsg(null), setOpen(true))}>
+          Change username
+        </button>
+      )}
+      {open && <p className={`cm-hint ${check.bad ? 'is-bad' : check.good ? 'is-good' : ''}`}>{check.text || '3–16 letters, numbers or underscores'}</p>}
+      {msg && <p className={`cm-hint ${msg.bad ? 'is-bad' : 'is-good'}`}>{msg.text}</p>}
+      {quota && (
+        <p className="cm-fine cm-left">
+          {left === 0
+            ? `You’ve used both changes for this week. You can change it again ${when(quota.next_at)}.`
+            : left === 1
+              ? '1 change left this week.'
+              : 'You can change your username twice a week.'}
+        </p>
+      )}
+      {open && (
+        <button type="button" className="cm-link" onClick={cancel}>
+          Cancel
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -187,7 +263,7 @@ function DataAndDeletion({ username, onDeleted }) {
   return (
     <section className="cm-section">
       <h3>Your data</h3>
-      <p className="cm-fine cm-left">Download a copy of everything we store about you: your email, username and every run.</p>
+      <p className="cm-fine cm-left">Download a copy of everything we store about you: your email, username, past usernames and every run.</p>
       <button className="cm-btn cm-btn--small" onClick={download} disabled={!!busy}>
         {busy === 'export' ? 'Preparing…' : 'Download my data'}
       </button>

@@ -117,10 +117,12 @@ export const api = {
     if (!u) throw new Error('Sign in first.');
     const profile = unwrap(await supabase.from('profiles').select('*').eq('id', u.id).limit(1))[0] || null;
     const runs = unwrap(await supabase.from('runs').select('*').eq('user_id', u.id).order('started_at', { ascending: true }));
+    const usernameChanges = unwrap(await supabase.from('username_changes').select('old_username, new_username, changed_at').eq('user_id', u.id).order('changed_at', { ascending: true }));
     return {
       exported_at: new Date().toISOString(),
       account: { id: u.id, email: u.email, created_at: u.created_at, email_confirmed_at: u.email_confirmed_at, last_sign_in_at: u.last_sign_in_at },
       profile,
+      username_changes: usernameChanges,
       runs,
     };
   },
@@ -134,6 +136,14 @@ export const api = {
   },
   async claimUsername(name) {
     return unwrap(await supabase.rpc('claim_username', { p_username: name }));
+  },
+  // renames are limited to two in any seven days
+  async changeUsername(name) {
+    return unwrap(await supabase.rpc('change_username', { p_username: name }));
+  },
+  async usernameChanges() {
+    const rows = unwrap(await supabase.rpc('get_username_changes'));
+    return rows[0] || { remaining: 2, next_at: null };
   },
 
   async startRun(seed) {
