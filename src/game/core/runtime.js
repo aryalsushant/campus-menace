@@ -160,6 +160,37 @@ function snapshot(w) {
     p.d = c.d;
     p.y = c.y;
   }
+  // walkers, geese, robots and magnet-pulled pickups near the runner: kept
+  // on the objects themselves (render-only fields) for smooth motion
+  const lo = r.s - 12;
+  const hi = r.s + 60;
+  for (const o of w.obstacles) {
+    if (!(o.vs || o.vd || o.chase) || o.s < lo || o.s > hi) continue;
+    o._ps = o.s;
+    o._pd = o.d;
+    o._py = o.y;
+  }
+  for (const p of w.pickups) {
+    if (p.s < lo || p.s > hi) continue;
+    p._ps = p.s;
+    p._pd = p.d;
+    p._py = p.y;
+  }
+}
+
+// interpolated position of an obstacle or pickup (see snapshot)
+export function lerpObj(o, out = {}) {
+  if (o._ps === undefined) {
+    out.s = o.s;
+    out.d = o.d;
+    out.y = o.y;
+    return out;
+  }
+  const a = runtime.alpha;
+  out.s = o._ps + (o.s - o._ps) * a;
+  out.d = o._pd + (o.d - o._pd) * a;
+  out.y = o._py + (o.y - o._py) * a;
+  return out;
 }
 
 // Mirror the handful of values the HUD shows, only when they change.

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
+import { runtime, runnerLerp, lerpEntity, lerpObj, toWorld } from '../core/runtime';
 import { emit } from '../core/bus';
 import { useGame } from '../core/store';
 import { withRim, pbr } from './materials';
@@ -531,11 +531,13 @@ const Obstacle = memo(function Obstacle({ o }) {
   const ref = useRef();
   const inner = useRef();
   const w = useMemo(() => ({}), []);
+  const at = useMemo(() => ({}), []);
   const st = useRef({ hitT: 0 });
   useFrame((state, rawDt) => {
     if (!ref.current) return;
     const dt = Math.min(rawDt, 0.05) * runtime.timeScale;
-    const h = toWorld(o.s, o.d, o.y, w);
+    lerpObj(o, at);
+    const h = toWorld(at.s, at.d, at.y, w);
     ref.current.position.set(w.x, w.y, w.z);
     let yaw = -h;
     if (o.model === 'goose' || o.model === 'tourist') yaw += Math.PI; // face the runner
@@ -777,6 +779,7 @@ export function Pickups() {
   const geo = useMemo(pizzaGeometry, []);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, emissive: new THREE.Color('#ff9a2a'), emissiveIntensity: 0.25 }), []);
   const tmp = useMemo(() => new THREE.Object3D(), []);
+  const at = useMemo(() => ({}), []);
   const w = useMemo(() => ({}), []);
   useFrame(state => {
     const world = runtime.world;
@@ -806,7 +809,8 @@ export function Pickups() {
         const k = Math.min(1, (world.t - p.bornAt) / 0.3);
         lift += (1 - k) * -0.6 + Math.sin(k * Math.PI) * 0.8;
       }
-      const h = toWorld(p.s, p.d, p.y + lift, w);
+      lerpObj(p, at);
+      const h = toWorld(at.s, at.d, at.y + lift, w);
       tmp.position.set(w.x, w.y, w.z);
       tmp.rotation.set(0.25, -h + t * 2.2 + p.s, 0);
       tmp.scale.setScalar(scale);
@@ -892,13 +896,15 @@ function PowerModel() {
   );
 }
 
+const _at = {};
 function placePower(g, p, world, t, w) {
   if (p.taken) {
     g.visible = false;
     return;
   }
   g.visible = true;
-  toWorld(p.s, p.d, p.y + Math.sin(t * 2.5 + p.s) * 0.12, w);
+  lerpObj(p, _at);
+  toWorld(_at.s, _at.d, _at.y + Math.sin(t * 2.5 + p.s) * 0.12, w);
   g.position.set(w.x, w.y, w.z);
   g.rotation.y = t * 1.8;
   for (const c of g.children) {
