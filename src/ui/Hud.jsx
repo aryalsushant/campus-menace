@@ -139,17 +139,24 @@ function Callouts() {
   );
 }
 
-// speed lines strengthen with speed; cheap CSS overlay
+// speed lines strengthen with speed; cheap CSS overlay. Kept faint, and the
+// style is only touched when the level actually changes.
 function SpeedLines() {
   const ref = useRef();
   useEffect(() => {
     let raf;
+    let shown = -1;
     const loop = () => {
       const w = runtime.world;
       if (w && ref.current) {
         const v = w.runner.speed;
         const k = Math.max(0, Math.min(1, (v - 15) / 10)) + (w.power.coffee > 0 ? 0.4 : 0);
-        ref.current.style.opacity = String(Math.min(0.75, k * 0.6));
+        const o = Math.round(Math.min(0.4, k * 0.32) * 50) / 50;
+        if (o !== shown) {
+          shown = o;
+          ref.current.style.opacity = String(o);
+          ref.current.style.visibility = o > 0 ? 'visible' : 'hidden';
+        }
       }
       raf = requestAnimationFrame(loop);
     };

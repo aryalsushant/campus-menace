@@ -154,7 +154,8 @@ export function buildSection(seg, track) {
   const ss = sampleS(seg.s0, seg.s1, 2);
   const K = makeKit(rnd);
 
-  // ---- walkway: herringbone brick (UV-mapped, ~2 m per texture tile)
+  // ---- walkway: herringbone brick (UV-mapped, ~2.8 m per texture tile:
+  // smaller bricks rushing at the camera read as a flickering pattern)
   const pathGeo = (() => {
     const pos = [];
     const uv = [];
@@ -164,7 +165,7 @@ export function buildSection(seg, track) {
       for (const d of [-w - 0.05, w + 0.05]) {
         const v = wp(track, s, d, y);
         pos.push(v.x, v.y, v.z);
-        uv.push(d / 2, s / 2);
+        uv.push(d / 2.8, s / 2.8);
       }
       if (i > 0) {
         const a = (i - 1) * 2;

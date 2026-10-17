@@ -178,9 +178,11 @@ kbd {
   position: absolute; inset: -10%; opacity: 0; mix-blend-mode: screen;
   background: repeating-conic-gradient(from 0deg at 50% 46%, rgba(255, 255, 255, 0) 0deg, rgba(255, 255, 255, 0) 5.5deg, rgba(255, 255, 255, 0.22) 6deg, rgba(255, 255, 255, 0) 6.6deg);
   -webkit-mask-image: radial-gradient(ellipse at 50% 46%, transparent 32%, #000 70%); mask-image: radial-gradient(ellipse at 50% 46%, transparent 32%, #000 70%);
-  animation: cm-lines 0.35s linear infinite;
+  visibility: hidden; will-change: transform;
+  /* a slow, gentle breathe: the old quick rotate-and-snap strobed at ~3 Hz */
+  animation: cm-lines 0.9s ease-in-out infinite alternate;
 }
-@keyframes cm-lines { from { transform: rotate(0deg) scale(1); } to { transform: rotate(2deg) scale(1.04); } }
+@keyframes cm-lines { from { transform: scale(1); } to { transform: scale(1.03); } }
 
 /* --------------------------------------------------------------- menus */
 .cm-overlay {
