@@ -4,7 +4,6 @@ import * as THREE from 'three';
 import { runtime, runnerLerp, toWorld } from '../core/runtime';
 import { timeOfDayAt } from '../sim/tune';
 import { shared } from './materials';
-import { useOriginShift } from './origin';
 
 // Three keyframes: morning → sunset → night. Everything (sky, fog, lights,
 // clouds, window glow) is blended from the same timeline.
@@ -222,27 +221,28 @@ function Lights({ shadows, shadowSize }) {
   }, [scene, target]);
   const q = useMemo(() => ({}), []);
   const wpos = useMemo(() => ({}), []);
-  const frame = useRef(0);
-  const shifted = useRef(false);
-  useOriginShift(() => (shifted.current = true));
+  const basis = useMemo(() => ({ d: new THREE.Vector3(), r: new THREE.Vector3(), u: new THREE.Vector3(), p: new THREE.Vector3(), Y: new THREE.Vector3(0, 1, 0) }), []);
   useFrame(() => {
     const L = sun.current;
     if (!L || !runtime.world) return;
-    // phones refresh the shadow map every other frame (the sun moves with you, so it isn't noticeable)
-    frame.current++;
-    if (L.shadow) {
-      L.shadow.autoUpdate = shadowSize >= 2048;
-      // always redraw right after the scene re-centres
-      if (!L.shadow.autoUpdate) L.shadow.needsUpdate = frame.current % 2 === 0 || shifted.current;
-      shifted.current = false;
-    }
+    // the shadow map redraws every frame: refreshing it every other frame
+    // made moving shadows (runner, riders) jitter at 30 Hz
     runnerLerp(q);
     toWorld(q.s + 10, 0, q.y, wpos);
-    const snap = 0.5;
-    const x = Math.round(wpos.x / snap) * snap;
-    const z = Math.round(wpos.z / snap) * snap;
-    L.position.set(x + SKY.sunDir.x * 70, wpos.y + SKY.sunDir.y * 70 + 6, z + SKY.sunDir.z * 70);
-    target.position.set(x, wpos.y, z);
+    // Snap the shadow camera to whole shadow-map texels in the light's own
+    // plane, so shadow edges don't crawl as the camera follows the runner.
+    const B = basis;
+    B.d.copy(SKY.sunDir).normalize();
+    B.r.crossVectors(B.Y, B.d).normalize();
+    B.u.crossVectors(B.d, B.r);
+    const texel = 68 / shadowSize;
+    B.p.set(wpos.x, wpos.y, wpos.z);
+    const a = Math.round(B.p.dot(B.r) / texel) * texel;
+    const b = Math.round(B.p.dot(B.u) / texel) * texel;
+    const c = B.p.dot(B.d);
+    B.p.copy(B.r).multiplyScalar(a).addScaledVector(B.u, b).addScaledVector(B.d, c);
+    target.position.copy(B.p);
+    L.position.copy(B.p).addScaledVector(B.d, 70);
     L.target = target;
     L.color.copy(SKY.sunColor);
     L.intensity = SKY.sunI;
@@ -266,8 +266,7 @@ function Lights({ shadows, shadowSize }) {
         shadow-camera-near={1}
         shadow-camera-far={200}
         shadow-intensity={0.38}
-        shadow-radius={4}
-        shadow-blurSamples={8}
+        shadow-radius={2}
         shadow-bias={-0.0004}
         shadow-normalBias={0.05}
       />
@@ -327,11 +326,17 @@ function SkyEnvironment() {
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -2;
     envScene.add(ground);
-    return { envScene, mat, pmrem: new THREE.PMREMGenerator(gl), lastTod: -1, rt: null, ground };
+    // The sky is drawn into one cube target and filtered into one reused
+    // output: fromScene() allocated fresh GPU buffers on every refresh, a
+    // 40-50 ms hitch every few seconds on phones.
+    const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+    const cubeCam = new THREE.CubeCamera(0.1, 100, cubeRT);
+    return { envScene, mat, pmrem: new THREE.PMREMGenerator(gl), lastTod: -1, rt: null, ground, cubeRT, cubeCam };
   }, [gl]);
   useEffect(
     () => () => {
       state.pmrem.dispose();
+      state.cubeRT.dispose();
       if (state.rt) state.rt.dispose();
       scene.environment = null;
     },
@@ -342,10 +347,10 @@ function SkyEnvironment() {
     state.lastTod = SKY.tod;
     state.mat.uniforms.uNight.value = SKY.night;
     state.ground.material.color.copy(SKY.hemiGround).multiplyScalar(1.2);
-    const rt = state.pmrem.fromScene(state.envScene, 0.02);
-    if (state.rt) state.rt.dispose();
-    state.rt = rt;
-    scene.environment = rt.texture;
+    // 128 px is plenty for the soft sky reflections
+    state.cubeCam.update(gl, state.envScene);
+    state.rt = state.pmrem.fromCubemap(state.cubeRT.texture, state.rt);
+    scene.environment = state.rt.texture;
     scene.environmentIntensity = 0.55 - SKY.night * 0.25;
   });
   return null;

@@ -149,7 +149,9 @@ let mat = null;
 export function foliageMaterial() {
   if (mat) return mat;
   atlas = paintAtlas();
-  mat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.42, side: THREE.DoubleSide, vertexColors: true, roughness: 0.75, metalness: 0 });
+  // alpha-to-coverage turns the hard cut-out edge of every leaf into a smooth
+  // MSAA edge; without it thousands of leaf edges sparkle as the camera moves
+  mat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.42, alphaToCoverage: true, side: THREE.DoubleSide, vertexColors: true, roughness: 0.75, metalness: 0 });
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = shared.uTime;
     sh.vertexShader = sh.vertexShader
@@ -164,17 +166,17 @@ export function foliageMaterial() {
       )
       // leaves light from above, not as flat cards
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.65));');
-    // dissolve foliage right in front of the camera (dithered, no sorting)
+    // fade foliage right in front of the camera through MSAA coverage (no
+    // sorting, and no per-pixel noise that shimmers as it moves)
     sh.fragmentShader = sh.fragmentShader.replace(
       '#include <alphatest_fragment>',
       `#include <alphatest_fragment>
       float camDist = length(vViewPosition);
-      float keep = smoothstep(5.0, 11.0, camDist);
-      float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-      if (dither > keep) discard;`
+      diffuseColor.a *= smoothstep(5.0, 11.0, camDist);
+      if (diffuseColor.a < 0.02) discard;`
     );
   };
-  mat.customProgramCacheKey = () => 'foliage-cards';
+  mat.customProgramCacheKey = () => 'foliage-cards-a2c';
   return mat;
 }
 
