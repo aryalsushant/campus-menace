@@ -148,6 +148,25 @@ export function attach(person, boneName, object, { pos = [0, 0, 0], rot = [0, 0,
   bone.add(object);
 }
 
+// Building a person (cloning the rig, painting the outfit) takes a few ms.
+// Groups (a queue, a tour) arrive a dozen at a time, so builds are spread
+// over frames with a small time budget instead of all landing in one.
+const buildQueue = [];
+let pumping = false;
+function pump() {
+  const t0 = performance.now();
+  while (buildQueue.length && performance.now() - t0 < 4) buildQueue.shift()();
+  if (buildQueue.length) requestAnimationFrame(pump);
+  else pumping = false;
+}
+export function buildSoon(fn) {
+  buildQueue.push(fn);
+  if (!pumping) {
+    pumping = true;
+    requestAnimationFrame(pump);
+  }
+}
+
 export function makePerson({ sex = 'm', outfit, hair = 'Hair_SimpleParted', hairColor = '#2a1a12', brows = true, castShadow = true, lod = false }) {
   const A = assets;
   const root = new THREE.Group();
