@@ -30,7 +30,7 @@ export default function Landing() {
   const profile = useGame(s => s.profile);
   const recovering = useGame(s => s.recovering);
   const askUniversity = useGame(s => needsUniversity(s));
-  const step = !authReady ? 'loading' : !session ? 'auth' : recovering ? 'newpass' : !profile ? 'username' : askUniversity ? 'university' : 'ready';
+  const step = !authReady ? 'loading' : !session ? 'auth' : recovering ? 'newpass' : askUniversity ? 'university' : 'ready';
   return (
     <div className="cm-landing">
       <div className="cm-landing-top">
@@ -47,7 +47,6 @@ export default function Landing() {
         )}
         {step === 'auth' && <AuthCard key="auth" />}
         {step === 'newpass' && <NewPasswordCard key="newpass" />}
-        {step === 'username' && <UsernameCard key="username" />}
         {step === 'university' && <UniversityCard key="university" />}
         {step === 'ready' && <ReadyCard key="ready" />}
       </AnimatePresence>
@@ -65,12 +64,11 @@ function AuthCard() {
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
+  const [offer, setOffer] = useState(false); // "no account for this email: sign up?"
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [info, setInfo] = useState('');
   const [unconfirmed, setUnconfirmed] = useState(false);
-  const name = useUsernameCheck(mode === 'signup' ? username : '');
   const emailRef = useRef(null);
   const [checkEmail, setCheckEmail] = useState(false);
   const suggestion = suggestEmail(email);
@@ -114,22 +112,29 @@ function AuthCard() {
           await api.signIn(email, password);
         } catch (x) {
           if (/confirm your email/i.test(x.message)) setUnconfirmed(true);
+          else if (/wrong email or password/i.test(x.message)) {
+            // new players often sign in first: offer to make the account
+            const known = await api.emailRegistered(email).catch(() => true);
+            if (!known) return setOffer(true);
+            throw new Error('Wrong password. Try again or reset it below.');
+          }
           throw x;
         }
       });
     else if (mode === 'signup') {
-      if (name.problem) return setErr(name.problem);
       if (password.length < 8) return setErr('Use at least 8 characters for your password.');
-      run(async () => {
-        await api.signUp(email, password, username);
-        setPassword('');
-        setMode('sent');
-      });
+      run(createAccount);
     } else if (mode === 'forgot')
       run(async () => {
         await api.sendPasswordReset(email);
         setMode('reset-sent');
       });
+  };
+  const createAccount = async () => {
+    await api.signUp(email, password);
+    setPassword('');
+    setOffer(false);
+    setMode('sent');
   };
   const resend = () => run(async () => {
     await api.resendConfirmation(email);
@@ -173,6 +178,26 @@ function AuthCard() {
     );
   }
 
+  if (offer)
+    return (
+      <SignUpOffer
+        email={email}
+        password={password}
+        setPassword={setPassword}
+        busy={busy}
+        err={err}
+        onYes={() => {
+          if (password.length < 8) return setErr('Use at least 8 characters for your password.');
+          run(createAccount);
+        }}
+        onNo={() => {
+          setOffer(false);
+          setErr('');
+          setCheckEmail(true);
+        }}
+      />
+    );
+
   const signup = mode === 'signup';
   const forgot = mode === 'forgot';
   return (
@@ -195,15 +220,6 @@ function AuthCard() {
           ?
         </p>
       )}
-      {signup && (
-        <>
-          <label className="cm-field">
-            <span>Username</span>
-            <input maxLength={16} autoComplete="username" spellCheck={false} required value={username} onChange={e => setUsername(e.target.value)} placeholder="pizza_goblin" />
-          </label>
-          <p className={`cm-hint ${name.bad ? 'is-bad' : name.good ? 'is-good' : ''}`}>{name.text || '3–16 letters, numbers or underscores. Shown on the leaderboard.'}</p>
-        </>
-      )}
       {!forgot && (
         <label className="cm-field">
           <span>Password</span>
@@ -225,7 +241,7 @@ function AuthCard() {
           Resend the verification link
         </button>
       )}
-      <button className="cm-btn cm-btn--primary" disabled={busy || (signup && (name.bad || name.checking))}>
+      <button className="cm-btn cm-btn--primary" disabled={busy}>
         {busy ? 'One sec…' : signup ? 'Create account' : forgot ? 'Send reset link' : 'Sign in'}
       </button>
       {signup && (
@@ -268,6 +284,55 @@ function AuthCard() {
   );
 }
 
+// A sign-in with an email that has no account: offer to create one with
+// the same email and password, spelling out the email so typos stand out.
+function SignUpOffer({ email, password, setPassword, busy, err, onYes, onNo }) {
+  const short = password.length < 8;
+  // keep the field once shown so it doesn't vanish mid-typing at 8 characters
+  const [askPassword] = useState(short);
+  return (
+    <motion.form
+      className="cm-card cm-card--offer"
+      {...card}
+      role="alertdialog"
+      aria-labelledby="cm-offer-title"
+      onSubmit={e => {
+        e.preventDefault();
+        onYes();
+      }}
+    >
+      <h2 id="cm-offer-title">Email not found</h2>
+      <p className="cm-muted">
+        There’s no account for <b className="cm-email">{email.trim()}</b>. Do you want to sign up instead?
+      </p>
+      {askPassword && (
+        <label className="cm-field">
+          <span>Choose a password</span>
+          <input type="password" autoComplete="new-password" autoFocus required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" />
+        </label>
+      )}
+      {err && <p className="cm-error">{err}</p>}
+      <button className="cm-btn cm-btn--primary" disabled={busy} autoFocus={!askPassword}>
+        {busy ? 'One sec…' : 'Yes, sign me up'}
+      </button>
+      <button type="button" className="cm-link" onClick={onNo}>
+        No, let me fix my email
+      </button>
+      <p className="cm-fine">
+        We’ll email you a link to verify it. By signing up you confirm you’re 13 or older and agree to the{' '}
+        <a className="cm-link" href="/terms" target="_blank" rel="noopener">
+          Terms
+        </a>{' '}
+        and{' '}
+        <a className="cm-link" href="/privacy" target="_blank" rel="noopener">
+          Privacy Policy
+        </a>
+        .
+      </p>
+    </motion.form>
+  );
+}
+
 // Shown after a password-reset link signs the player in.
 function NewPasswordCard() {
   const [password, setPassword] = useState('');
@@ -297,48 +362,6 @@ function NewPasswordCard() {
       {err && <p className="cm-error">{err}</p>}
       <button className="cm-btn cm-btn--primary" disabled={busy}>
         {busy ? 'Saving…' : 'Save password'}
-      </button>
-      <button type="button" className="cm-link" onClick={() => api.signOut()}>
-        Sign out
-      </button>
-    </motion.form>
-  );
-}
-
-function UsernameCard() {
-  const session = useGame(s => s.session);
-  const wanted = (session && session.user && session.user.user_metadata && session.user.user_metadata.username) || '';
-  const [name, setName] = useState(wanted);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const check = useUsernameCheck(name);
-  const submit = async e => {
-    e.preventDefault();
-    if (check.problem) return setErr(check.problem);
-    setBusy(true);
-    setErr('');
-    try {
-      const p = await api.claimUsername(name);
-      setGame({ profile: p });
-    } catch (x) {
-      setErr(x.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <motion.form className="cm-card" {...card} onSubmit={submit}>
-      <h2>Pick your username</h2>
-      <p className="cm-muted">
-        {wanted ? `“${wanted}” isn’t available any more. Pick another one.` : 'This is how you show up on the leaderboard. You can change it from your profile later.'}
-      </p>
-      <label className="cm-field">
-        <span>Username</span>
-        <input autoFocus maxLength={16} autoComplete="off" spellCheck={false} value={name} onChange={e => setName(e.target.value)} placeholder="pizza_goblin" />
-      </label>
-      <p className={`cm-hint ${check.bad ? 'is-bad' : check.good ? 'is-good' : ''}`}>{err || check.text || '3–16 letters, numbers or underscores'}</p>
-      <button className="cm-btn cm-btn--primary" disabled={busy || !name || check.bad || check.checking}>
-        {busy ? 'Saving…' : 'Claim it'}
       </button>
       <button type="button" className="cm-link" onClick={() => api.signOut()}>
         Sign out
@@ -380,6 +403,8 @@ function UniversityCard() {
   );
 }
 
+// The start screen. New players have no username yet: they see the
+// tutorial first, then pick a username right here and start their first run.
 function ReadyCard() {
   // keep the name on screen while the card animates out after signing out
   const current = useGame(s => s.profile);
@@ -392,6 +417,7 @@ function ReadyCard() {
   const [board, setBoard] = useState(null);
   const [showBoard, setShowBoard] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const username = profile && profile.username;
   useEffect(() => {
     let live = true;
     api.myStats().then(s => live && setGame({ stats: s })).catch(() => {});
@@ -399,7 +425,7 @@ function ReadyCard() {
     return () => {
       live = false;
     };
-  }, [profile.username]); // reload after a rename so the board shows the new name
+  }, [username]); // reload after a rename so the board shows the new name
   const firstTime = useGame(s => needsTutorial(s));
   // new players get the tutorial: build its campus while this screen shows
   useEffect(() => {
@@ -414,21 +440,40 @@ function ReadyCard() {
     <>
       <motion.div className="cm-card cm-card--ready" {...card}>
         {notice && notice.kind === 'good' && <p className="cm-notice">{notice.text}</p>}
-        <div className="cm-ready-head">
-          <div>
-            <p className="cm-muted">Signed in as</p>
-            <h2>{profile.username}</h2>
-          </div>
-          <div className="cm-best">
-            <span>🍕 {stats ? stats.best : '–'}</span>
-            <small>{stats && stats.rank ? `#${stats.rank} worldwide` : 'no runs yet'}</small>
-          </div>
-        </div>
-        <button className="cm-btn cm-btn--start" onClick={() => startRun()} autoFocus>
-          <span className="cm-start-pulse" />
-          {touch ? 'TAP TO RUN' : 'PRESS ENTER TO RUN'}
-        </button>
-        {firstTime ? <p className="cm-fine">First time? A quick tutorial shows you the controls.</p> : <Controls touch={touch} />}
+        {profile ? (
+          <>
+            <div className="cm-ready-head">
+              <div>
+                <p className="cm-muted">Signed in as</p>
+                <h2>{profile.username}</h2>
+              </div>
+              <div className="cm-best">
+                <span>🍕 {stats ? stats.best : '–'}</span>
+                <small>{stats && stats.rank ? `#${stats.rank} worldwide` : 'no runs yet'}</small>
+              </div>
+            </div>
+            <button className="cm-btn cm-btn--start" onClick={() => startRun()} autoFocus>
+              <span className="cm-start-pulse" />
+              {touch ? 'TAP TO RUN' : 'PRESS ENTER TO RUN'}
+            </button>
+            {firstTime ? <p className="cm-fine">First time? A quick tutorial shows you the controls.</p> : <Controls touch={touch} />}
+          </>
+        ) : firstTime ? (
+          <>
+            <div className="cm-ready-head">
+              <div>
+                <h2>Welcome!</h2>
+                <p className="cm-muted">Let’s learn the controls first. It takes about a minute.</p>
+              </div>
+            </div>
+            <button className="cm-btn cm-btn--start" onClick={() => startRun()} autoFocus>
+              <span className="cm-start-pulse" />
+              {touch ? 'TAP TO START' : 'PRESS ENTER TO START'}
+            </button>
+          </>
+        ) : (
+          <NameAndStart touch={touch} />
+        )}
         {board && board.length > 0 && (
           <div className="cm-mini-board">
             {board.slice(0, 5).map(r => (
@@ -444,9 +489,11 @@ function ReadyCard() {
           <button className="cm-link" onClick={() => setShowBoard(true)}>
             Full leaderboard
           </button>
-          <button className="cm-link" onClick={() => setShowProfile(true)}>
-            Profile
-          </button>
+          {profile && (
+            <button className="cm-link" onClick={() => setShowProfile(true)}>
+              Profile
+            </button>
+          )}
           <button className="cm-link" onClick={() => startTutorial()}>
             Tutorial
           </button>
@@ -458,6 +505,46 @@ function ReadyCard() {
       <AnimatePresence>{showBoard && <Leaderboard onClose={() => setShowBoard(false)} />}</AnimatePresence>
       <AnimatePresence>{showProfile && <Profile onClose={() => setShowProfile(false)} />}</AnimatePresence>
     </>
+  );
+}
+
+// After the tutorial: pick a username, then straight into the first run.
+function NameAndStart({ touch }) {
+  const session = useGame(s => s.session);
+  // accounts from before this flow may have asked for a name that's since been taken
+  const wanted = (session && session.user && session.user.user_metadata && session.user.user_metadata.username) || '';
+  const [name, setName] = useState(wanted);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const check = useUsernameCheck(name);
+  const submit = async e => {
+    e.preventDefault();
+    if (check.problem) return setErr(check.problem);
+    setBusy(true);
+    setErr('');
+    try {
+      const p = await api.claimUsername(name);
+      setGame({ profile: p });
+      startRun();
+    } catch (x) {
+      setErr(x.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="cm-name-start" onSubmit={submit}>
+      <h2>Pick a username</h2>
+      <p className="cm-muted">{wanted ? `“${wanted}” isn’t available any more. Pick another one.` : 'This is how you show up on the leaderboard.'}</p>
+      <label className="cm-field">
+        <span>Username</span>
+        <input autoFocus maxLength={16} autoComplete="off" spellCheck={false} value={name} onChange={e => setName(e.target.value)} placeholder="pizza_goblin" />
+      </label>
+      <p className={`cm-hint ${check.bad ? 'is-bad' : check.good ? 'is-good' : ''}`}>{err || check.text || '3–16 letters, numbers or underscores'}</p>
+      <button className="cm-btn cm-btn--start" disabled={busy || !name || check.bad || check.checking}>
+        <span className="cm-start-pulse" />
+        {busy ? 'STARTING…' : touch ? 'START GAME' : 'START GAME (ENTER)'}
+      </button>
+    </form>
   );
 }
 

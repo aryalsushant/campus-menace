@@ -12,6 +12,7 @@ export default function Tutorial() {
   const tut = useGame(s => s.tutorial);
   const touch = useGame(s => s.touch);
   const steerMode = useGame(s => s.steerMode);
+  const named = useGame(s => !!s.profile);
   useEffect(() => {
     if (!tut || tut.status !== 'done') return undefined;
     const k = e => {
@@ -85,11 +86,11 @@ export default function Tutorial() {
         {tut.status === 'done' && (
           <motion.div key="done" className="cm-tut-card cm-tut-card--done" {...pop}>
             <h2>You’ve got it!</h2>
-            <p>Dodge the scooters, grab the pizza, and see how far you can get.</p>
+            <p>{named ? 'Dodge the scooters, grab the pizza, and see how far you can get.' : 'Next, pick a username and start your first run.'}</p>
             <p className="cm-tut-tip">{touch ? 'Tip: swipe up again in the air to double jump.' : 'Tip: press ↑ again in the air to double jump.'}</p>
             <button className="cm-btn cm-btn--start" onClick={() => endTutorial('run')} autoFocus>
               <span className="cm-start-pulse" />
-              {touch ? 'START A RUN' : 'START A RUN (ENTER)'}
+              {named ? (touch ? 'START A RUN' : 'START A RUN (ENTER)') : touch ? 'CONTINUE' : 'CONTINUE (ENTER)'}
             </button>
             <button className="cm-link" onClick={() => startTutorial()}>
               Practice again
