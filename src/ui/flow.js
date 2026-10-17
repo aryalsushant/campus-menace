@@ -14,18 +14,22 @@ let runToken = null; // { id, promise }
 let overTimer = null;
 
 // New players (no runs yet, tutorial never finished or skipped) learn the
-// controls first. Their stats must have loaded so returning players never see it.
+// controls first. Players with a username need their stats loaded so
+// returning players never see it; without one they've never run.
 export function needsTutorial(g = getGame()) {
-  if (!g.profile || g.tutorialDone || !g.stats) return false;
-  const meta = g.session && g.session.user && g.session.user.user_metadata;
+  if (!g.session || g.tutorialDone) return false;
+  const meta = g.session.user && g.session.user.user_metadata;
   if (meta && meta.tutorial_done) return false;
+  if (!g.profile) return true;
+  if (!g.stats) return false;
   return !(g.stats.total_runs > 0);
 }
 
 export async function startRun(opts = {}) {
   const g = getGame();
-  if ((g.phase === 'playing' && !opts.fromTutorial) || !g.profile) return;
+  if (g.phase === 'playing' && !opts.fromTutorial) return;
   if (!opts.fromTutorial && needsTutorial(g)) return startTutorial();
+  if (!g.profile) return; // a username comes first
   runtime.tutorial = null;
   if (getGame().tutorial) setGame({ tutorial: null });
   await beginPlay(g);
@@ -48,7 +52,7 @@ export async function startRun(opts = {}) {
 // A practice world nothing can end; nothing is submitted.
 export async function startTutorial() {
   const g = getGame();
-  if (!g.profile) return;
+  if (!g.session) return;
   await beginPlay(g);
   startWorld('play', undefined, { tutorial: true });
   const tut = createTutorial({ touch: g.touch });
@@ -68,7 +72,8 @@ export function endTutorial(next) {
   }
   runtime.tutorial = null;
   setGame({ tutorial: null });
-  if (next === 'run') startRun({ fromTutorial: true });
+  // new players pick their username on the start screen first
+  if (next === 'run' && getGame().profile) startRun({ fromTutorial: true });
   else backToMenu();
 }
 

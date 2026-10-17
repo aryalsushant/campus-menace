@@ -77,7 +77,7 @@ export default function App() {
         const g = getGame();
         if (action === 'pause') togglePause();
         else if (action === 'mute') setPersisted({ muted: !g.muted });
-        else if (action === 'start' && (g.phase === 'over' || (g.phase === 'landing' && g.profile && document.querySelector('.cm-card--ready') && !document.querySelector('.cm-card--board')))) startRun();
+        else if (action === 'start' && (g.phase === 'over' || (g.phase === 'landing' && document.querySelector('.cm-card--ready') && !document.querySelector('.cm-card--board')))) startRun();
       }),
     []
   );

@@ -362,3 +362,4 @@ kbd {
 .cm-unlock p { margin: 0; font-weight: 700; text-align: left; }
 .cm-unlock .cm-btn { align-self: stretch; }
 .cm-row--start { justify-content: flex-start; align-items: center; gap: 14px; }
+.cm-name-start { display: flex; flex-direction: column; gap: 12px; }
