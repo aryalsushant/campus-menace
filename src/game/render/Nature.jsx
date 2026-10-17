@@ -25,8 +25,20 @@ function bladeGeometry() {
   return g;
 }
 
+const LAWN = new THREE.Color('#5c9e38');
+const LAWN_FRESH = new THREE.Color('#7cc858');
+
+function sectionAt(segments, s) {
+  for (let i = 0; i < segments.length; i++) {
+    const g = segments[i];
+    if (g.kind === 'section' && s >= g.s0 && s <= g.s1) return g;
+  }
+  return null;
+}
+
 function grassMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, side: THREE.DoubleSide });
+  m.userData.instancedOnly = true; // the shader reads instanceMatrix
   m.onBeforeCompile = sh => {
     sh.uniforms.uTime = shared.uTime;
     sh.vertexShader = sh.vertexShader
@@ -38,7 +50,11 @@ function grassMaterial() {
         vec4 ip = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         float wave = sin(uTime * 1.9 + ip.x * 0.35 + ip.z * 0.27) * 0.5 + sin(uTime * 3.1 + ip.x * 0.9) * 0.2;
         transformed.x += wave * 0.16 * h * h;
-        transformed.z += wave * 0.08 * h * h;`
+        transformed.z += wave * 0.08 * h * h;
+        // shrink blades away with distance: far off they're thinner than a
+        // pixel and only flicker
+        vec4 iv = modelViewMatrix * ip;
+        transformed *= 1.0 - smoothstep(26.0, 42.0, -iv.z);`
       )
       // grass normals point up so blades light like the lawn, not like cards
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = vec3(0.0, 1.0, 0.0);');
@@ -53,9 +69,12 @@ export function Grass({ count }) {
   const ref = useRef();
   const geo = useMemo(bladeGeometry, []);
   const mat = useMemo(grassMaterial, []);
+  // Sorted by position along the window, so the few blades that move each
+  // frame sit next to each other and only that slice of the buffer is sent
+  // to the GPU (the whole buffer was re-uploaded every frame: ~40 MB/s).
   const blades = useMemo(() => {
     const rnd = Math.random;
-    return Array.from({ length: count }, () => ({ u: rnd(), side: rnd() < 0.5 ? -1 : 1, off: rnd(), rot: rnd() * Math.PI, sc: 0.7 + rnd() * 0.7, base: -1, shade: rnd() }));
+    return Array.from({ length: count }, () => ({ u: rnd(), side: rnd() < 0.5 ? -1 : 1, off: rnd(), rot: rnd() * Math.PI, sc: 0.7 + rnd() * 0.7, base: -1, shade: rnd() })).sort((a, b) => a.u - b.u);
   }, [count]);
   // re-place every blade after the scene re-centres
   useOriginShift(() => blades.forEach(b => (b.base = NaN)));
@@ -71,8 +90,8 @@ export function Grass({ count }) {
     if (!world || !mesh) return;
     runnerLerp(q);
     const start = Math.floor((q.s - 12) / SPAN) * SPAN;
-    let dirty = false;
-    let colorsDirty = false;
+    let lo = Infinity;
+    let hi = -1;
     for (let i = 0; i < blades.length; i++) {
       const b = blades[i];
       // which window does this blade belong to: keep it within [q.s - 12, q.s - 12 + SPAN)
@@ -81,8 +100,9 @@ export function Grass({ count }) {
       const base = s;
       if (b.base === base) continue;
       b.base = base;
-      dirty = true;
-      const seg = world.segments.find(g => g.kind === 'section' && s >= g.s0 && s <= g.s1);
+      if (i < lo) lo = i;
+      if (i > hi) hi = i;
+      const seg = sectionAt(world.segments, s);
       if (!seg || seg.stage === 1) {
         tmp.position.set(0, -9999, 0);
         tmp.scale.setScalar(0);
@@ -102,12 +122,23 @@ export function Grass({ count }) {
       tmp.scale.set(b.sc, b.sc * (0.8 + b.shade * 0.6), b.sc);
       tmp.updateMatrix();
       mesh.setMatrixAt(i, tmp.matrix);
-      col.set(seg.stage === 2 ? '#7cc858' : '#5c9e38').offsetHSL((b.shade - 0.5) * 0.06, 0, (b.shade - 0.5) * 0.12);
+      col.copy(seg.stage === 2 ? LAWN_FRESH : LAWN).offsetHSL((b.shade - 0.5) * 0.06, 0, (b.shade - 0.5) * 0.12);
       mesh.setColorAt(i, col);
-      colorsDirty = true;
     }
-    if (dirty) mesh.instanceMatrix.needsUpdate = true;
-    if (colorsDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (hi >= 0) {
+      // the changed blades form one run (two when the window wraps; then
+      // lo..hi covers both ends, still far less than everything most frames)
+      const m = mesh.instanceMatrix;
+      m.clearUpdateRanges();
+      m.addUpdateRange(lo * 16, (hi - lo + 1) * 16);
+      m.needsUpdate = true;
+      if (mesh.instanceColor) {
+        const c = mesh.instanceColor;
+        c.clearUpdateRanges();
+        c.addUpdateRange(lo * 3, (hi - lo + 1) * 3);
+        c.needsUpdate = true;
+      }
+    }
     if (heights.size > 30) heights.clear();
   });
 

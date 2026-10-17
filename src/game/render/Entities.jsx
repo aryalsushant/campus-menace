@@ -2,19 +2,22 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { runtime, runnerLerp, lerpEntity, toWorld } from '../core/runtime';
+import { runtime, runnerLerp, lerpEntity, lerpObj, toWorld } from '../core/runtime';
 import { emit } from '../core/bus';
 import { useGame } from '../core/store';
 import { withRim, pbr } from './materials';
 import { mergeStatic } from './geo';
 import { useOriginShift } from './origin';
-import { loadPeople, makePerson, randomLook } from './people';
+import { loadPeople, makePerson, randomLook, buildSoon } from './people';
 import { canAssets, pizzaGeometry } from './props';
 
 const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, flatShading: true, ...o });
 const glow = (c, k = 2.2) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
 
 let M = null;
+// every obstacle material, for the shader warm-up before the first run
+export const obstacleMaterials = () => Object.values(mats()).flat();
+
 function mats() {
   if (M) return M;
   M = {
@@ -500,15 +503,17 @@ function RiggedPerson({ o }) {
   const P = useRef(null);
   useEffect(() => {
     let live = true;
-    loadPeople().then(() => {
-      if (!live || !ref.current) return;
-      const look = randomLook((o.seed || o.id) * 31 + 7);
-      const p = makePerson({ ...look, castShadow: true, lod: true });
-      p.play(o.model === 'tourist' ? 'Walk_Loop' : 'Idle_Talking_Loop', { timeScale: 0.8 + ((o.seed || 1) % 5) * 0.08 });
-      p.mixer.update(((o.seed || 1) % 17) * 0.13);
-      ref.current.add(p.root);
-      P.current = p;
-    });
+    loadPeople().then(() =>
+      buildSoon(() => {
+        if (!live || !ref.current) return;
+        const look = randomLook((o.seed || o.id) * 31 + 7);
+        const p = makePerson({ ...look, castShadow: true, lod: true });
+        p.play(o.model === 'tourist' ? 'Walk_Loop' : 'Idle_Talking_Loop', { timeScale: 0.8 + ((o.seed || 1) % 5) * 0.08 });
+        p.mixer.update(((o.seed || 1) % 17) * 0.13);
+        ref.current.add(p.root);
+        P.current = p;
+      })
+    );
     return () => {
       live = false;
     };
@@ -526,11 +531,13 @@ const Obstacle = memo(function Obstacle({ o }) {
   const ref = useRef();
   const inner = useRef();
   const w = useMemo(() => ({}), []);
+  const at = useMemo(() => ({}), []);
   const st = useRef({ hitT: 0 });
   useFrame((state, rawDt) => {
     if (!ref.current) return;
     const dt = Math.min(rawDt, 0.05) * runtime.timeScale;
-    const h = toWorld(o.s, o.d, o.y, w);
+    lerpObj(o, at);
+    const h = toWorld(at.s, at.d, at.y, w);
     ref.current.position.set(w.x, w.y, w.z);
     let yaw = -h;
     if (o.model === 'goose' || o.model === 'tourist') yaw += Math.PI; // face the runner
@@ -604,8 +611,11 @@ const _m4 = new THREE.Matrix4();
 
 function ObstacleBatch() {
   useGame(s => s.objVersion);
+  useGame(s => s.chunkVersion); // the next run's world fills in during the landing
   const [, setBakes] = useState(0);
-  const onDone = useCallback(() => setBakes(n => n + 1), []);
+  // the next bake waits a frame (a state update inside the bake's layout
+  // effect would otherwise re-render, and bake again, in the same frame)
+  const onDone = useCallback(() => requestAnimationFrame(() => setBakes(n => n + 1)), []);
   const group = useRef();
   const batches = useRef(new Map()); // key -> { meshes, cap }
   const hitT = useRef(new WeakMap());
@@ -673,20 +683,22 @@ function ObstacleBatch() {
       }
   }, -15);
 
-  // shapes that still need baking (each once, ever)
-  const pending = new Map();
-  if (runtime.world) for (const o of runtime.world.obstacles) if (isStatic(o)) {
-    const k = bakeKey(o);
-    if (!baked.has(k) && !pending.has(k)) pending.set(k, o);
+  // Shapes that still need baking (each once, ever). One per frame: baking
+  // several new kinds at once cost up to ~110 ms in a single frame. The
+  // next run's opening stretch is baked while the start screen shows.
+  let next = null;
+  for (const world of [runtime.world, runtime.mode === 'attract' && runtime.nextWorld]) {
+    if (!world || next) continue;
+    for (const o of world.obstacles) {
+      if (!isStatic(o) || baked.has(bakeKey(o))) continue;
+      next = o;
+      break;
+    }
   }
   return (
     <>
       <group ref={group} />
-      <group visible={false}>
-        {[...pending].map(([k, o]) => (
-          <Baker key={k} k={k} o={o} onDone={onDone} />
-        ))}
-      </group>
+      <group visible={false}>{next && <Baker key={bakeKey(next)} k={bakeKey(next)} o={next} onDone={onDone} />}</group>
     </>
   );
 }
@@ -767,6 +779,7 @@ export function Pickups() {
   const geo = useMemo(pizzaGeometry, []);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, emissive: new THREE.Color('#ff9a2a'), emissiveIntensity: 0.25 }), []);
   const tmp = useMemo(() => new THREE.Object3D(), []);
+  const at = useMemo(() => ({}), []);
   const w = useMemo(() => ({}), []);
   useFrame(state => {
     const world = runtime.world;
@@ -796,7 +809,8 @@ export function Pickups() {
         const k = Math.min(1, (world.t - p.bornAt) / 0.3);
         lift += (1 - k) * -0.6 + Math.sin(k * Math.PI) * 0.8;
       }
-      const h = toWorld(p.s, p.d, p.y + lift, w);
+      lerpObj(p, at);
+      const h = toWorld(at.s, at.d, at.y + lift, w);
       tmp.position.set(w.x, w.y, w.z);
       tmp.rotation.set(0.25, -h + t * 2.2 + p.s, 0);
       tmp.scale.setScalar(scale);
@@ -882,13 +896,15 @@ function PowerModel() {
   );
 }
 
+const _at = {};
 function placePower(g, p, world, t, w) {
   if (p.taken) {
     g.visible = false;
     return;
   }
   g.visible = true;
-  toWorld(p.s, p.d, p.y + Math.sin(t * 2.5 + p.s) * 0.12, w);
+  lerpObj(p, _at);
+  toWorld(_at.s, _at.d, _at.y + Math.sin(t * 2.5 + p.s) * 0.12, w);
   g.position.set(w.x, w.y, w.z);
   g.rotation.y = t * 1.8;
   for (const c of g.children) {
@@ -935,6 +951,9 @@ export function Cans() {
 }
 
 // ---------------------------------------------- aim line (keyboard players)
+const AIM_ON = new THREE.Color('#ff5a4a');
+const AIM_OFF = new THREE.Color('#ffffff');
+
 export function AimLine() {
   const ref = useRef();
   const reticle = useRef();
@@ -994,7 +1013,7 @@ export function AimLine() {
       }
     }
     mat.uniforms.uOn.value += ((target ? 1 : 0) - mat.uniforms.uOn.value) * 0.25;
-    mat.uniforms.uColor.value.set(target ? '#ff5a4a' : '#ffffff');
+    mat.uniforms.uColor.value.copy(target ? AIM_ON : AIM_OFF);
     mat.uniforms.uTime.value = state.clock.elapsedTime;
     const pos = geo.attributes.position.array;
     const N = pos.length / 6;
@@ -1006,11 +1025,13 @@ export function AimLine() {
       const y = (g ? g.h : q.y) + 0.06;
       for (let k = 0; k < 2; k++) {
         toWorld(s, d + (k ? 0.09 : -0.09), y, w);
-        pos.set([w.x, w.y, w.z], (i * 2 + k) * 3);
+        const o = (i * 2 + k) * 3;
+        pos[o] = w.x;
+        pos[o + 1] = w.y;
+        pos[o + 2] = w.z;
       }
     }
     geo.attributes.position.needsUpdate = true;
-    geo.computeBoundingSphere();
     if (target) {
       toWorld(target.s, target.d, (target.y ?? 0) + 2.25, w);
       reticle.current.visible = true;

@@ -309,10 +309,13 @@ export function pbr(key, { scale = 1, normal = 1, rough = 1, vertexColors = true
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = roughness * uTriRough * texture2D(tRough, uvA).g;`)
       .replace(
         '#include <normal_fragment_maps>',
-        `// UDN-blended normal map on the dominant projection, skipped far away
-        if (length(vViewPosition) < 45.0) {
+        `// UDN-blended normal map on the dominant projection, faded out with
+        // distance (a hard cut-off made a visible band that moved with you)
+        float nFade = 1.0 - smoothstep(30.0, 45.0, length(vViewPosition));
+        if (nFade > 0.0) {
           vec3 nW = normalize(vTriN);
           vec3 tn = texture2D(tNor, uvA).xyz * 2.0 - 1.0;
+          tn.xy *= nFade;
           vec3 wn = ma == 0 ? vec3(tn.xy * uTriNormal + nW.zy, nW.x).zyx : ma == 1 ? vec3(tn.xy * uTriNormal + nW.xz, nW.y).xzy : vec3(tn.xy * uTriNormal + nW.xy, nW.z);
           normal = normalize((viewMatrix * vec4(normalize(wn), 0.0)).xyz);
         }`

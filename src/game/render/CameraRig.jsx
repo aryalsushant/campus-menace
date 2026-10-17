@@ -91,9 +91,13 @@ export default function CameraRig() {
       return;
     }
     if (S.shake > 0 && !reduceMotion) {
+      // smooth noise (a few mixed sines) instead of a new random offset every
+      // frame, which read as harsh jitter
       const k = S.shake * S.shake;
-      camera.position.x += (Math.random() - 0.5) * k * 1.2;
-      camera.position.y += (Math.random() - 0.5) * k * 1.2;
+      S.shakeT = (S.shakeT || 0) + dt;
+      const t = S.shakeT * 38;
+      camera.position.x += (Math.sin(t) * 0.6 + Math.sin(t * 2.3 + 1.7) * 0.4) * k * 0.6;
+      camera.position.y += (Math.sin(t * 1.3 + 0.5) * 0.6 + Math.sin(t * 2.9 + 2.1) * 0.4) * k * 0.6;
       S.shake = Math.max(0, S.shake - dt * 1.6);
     }
     camera.lookAt(S.look);

@@ -10,12 +10,17 @@ import { windowMaterial } from './windows';
 
 // Which material each kit layer renders with.
 let MATS = null;
+// every chunk material, for the shader warm-up before the first run
+export const chunkMaterials = () => Object.values(kitMaterials()).flat();
 function kitMaterials() {
   if (MATS) return MATS;
   const m = materials();
   const T = texSet('path');
   MATS = {
-    path: new THREE.MeshStandardMaterial({ color: new THREE.Color(2.1, 1.85, 1.7), map: T.diff, normalMap: T.nor, roughnessMap: T.rough, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 1 }),
+    // The path fills half the screen and streams at the player, so it's kept
+    // calm: less brightness boost and shallower bricks (strong normals made
+    // every brick edge glint as it moved).
+    path: new THREE.MeshStandardMaterial({ color: new THREE.Color(1.6, 1.42, 1.32), map: T.diff, normalMap: T.nor, roughnessMap: T.rough, normalScale: new THREE.Vector2(0.55, 0.55), roughness: 1 }),
     brick: pbr('brick', { scale: 1 / 1.25, normal: 1.3 }),
     plaster: pbr('plaster', { scale: 0.6, normal: 0.4, rough: 0.8 }),
     stone: pbr('sandstone', { scale: 1 / 1.6, normal: 0.9 }),

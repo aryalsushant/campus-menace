@@ -1,3 +1,4 @@
+import { guessTier } from './quality';
 import { create } from 'zustand';
 
 const read = (k, fallback) => {
@@ -30,8 +31,8 @@ export const useGame = create(set => ({
   shaken: false,
   result: null,
   touch: false,
-  tier: 'high',
   quality: read('quality', 'auto'),
+  tier: initialTier(read('quality', 'auto')),
   muted: read('muted', false),
   tiltSensitivity: read('tilt', 1),
   steerMode: read('steerMode', 'tilt'), // phones: 'tilt' | 'drag'
@@ -51,6 +52,11 @@ export const useGame = create(set => ({
   objVersion: 0,
   set,
 }));
+
+// pick the tier before the first frame so the scene isn't built twice
+function initialTier(q) {
+  return q === 'auto' ? (typeof window === 'undefined' ? 'medium' : guessTier()) : q;
+}
 
 export const setGame = patch => useGame.setState(patch);
 export const getGame = () => useGame.getState();
