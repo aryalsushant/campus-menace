@@ -38,6 +38,7 @@ function grassMaterial() {
         vec4 ip = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         float wave = sin(uTime * 1.9 + ip.x * 0.35 + ip.z * 0.27) * 0.5 + sin(uTime * 3.1 + ip.x * 0.9) * 0.2;
         transformed.x += wave * 0.16 * h * h;
+  m.userData.instancedOnly = true; // the shader reads instanceMatrix
         transformed.z += wave * 0.08 * h * h;`
       )
       // grass normals point up so blades light like the lawn, not like cards

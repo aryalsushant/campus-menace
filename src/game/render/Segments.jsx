@@ -10,6 +10,8 @@ import { windowMaterial } from './windows';
 
 // Which material each kit layer renders with.
 let MATS = null;
+// every chunk material, for the shader warm-up before the first run
+export const chunkMaterials = () => Object.values(kitMaterials()).flat();
 function kitMaterials() {
   if (MATS) return MATS;
   const m = materials();

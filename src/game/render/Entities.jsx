@@ -15,6 +15,9 @@ const std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness:
 const glow = (c, k = 2.2) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
 
 let M = null;
+// every obstacle material, for the shader warm-up before the first run
+export const obstacleMaterials = () => Object.values(mats()).flat();
+
 function mats() {
   if (M) return M;
   M = {

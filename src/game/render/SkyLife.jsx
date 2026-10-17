@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // per-frame scratch
@@ -209,11 +209,16 @@ function BannerPlane() {
   const st = useRef({ t: 8, active: false, from: new THREE.Vector3(), dir: new THREE.Vector3(), i: 0 });
   useOriginShift(e => shiftVec(st.current.from, e));
   const textures = useMemo(() => BANNERS.map(bannerTexture), []);
+  // Upload every banner up front. The material starts with a map so swapping
+  // banners never changes its shader: adding the first map 45 s into a run
+  // used to recompile it and upload the texture mid-run (a ~180 ms freeze).
+  const { gl } = useThree();
+  useEffect(() => textures.forEach(t => gl.initTexture(t)), [gl, textures]);
   const mats = useMemo(
     () => ({
       plane: new THREE.MeshStandardMaterial({ color: '#d63a2f', roughness: 0.5 }),
       white: new THREE.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 }),
-      banner: new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false, transparent: true }),
+      banner: new THREE.MeshBasicMaterial({ map: textures[0], side: THREE.DoubleSide, fog: false, transparent: true }),
       rope: new THREE.MeshBasicMaterial({ color: '#444' }),
     }),
     []
@@ -226,7 +231,6 @@ function BannerPlane() {
       S.t = 0;
       S.i = (S.i + 1) % textures.length;
       mats.banner.map = textures[S.i];
-      mats.banner.needsUpdate = true;
       // fly across ahead of the camera, left to right or right to left
       const fwd = camera.getWorldDirection(_fwd);
       fwd.y = 0;
