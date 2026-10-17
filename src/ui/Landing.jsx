@@ -6,6 +6,7 @@ import { startRun, startTutorial, needsTutorial, prepareTutorial } from './flow'
 import { Leaderboard } from './Menus';
 import Profile from './Profile.jsx';
 import { useUsernameCheck } from './username';
+import { suggestEmail } from './emailTypos';
 import { UniversityPicker, saveUniversity, needsUniversity, markUniversityAsked } from './University';
 
 const card = {
@@ -70,11 +71,24 @@ function AuthCard() {
   const [info, setInfo] = useState('');
   const [unconfirmed, setUnconfirmed] = useState(false);
   const name = useUsernameCheck(mode === 'signup' ? username : '');
+  const emailRef = useRef(null);
+  const [checkEmail, setCheckEmail] = useState(false);
+  const suggestion = suggestEmail(email);
+  // An email carried over from another form is easy to miss, and a typo in
+  // it sends the verification link to a stranger: select it so it's seen
+  // and typing replaces it.
+  useEffect(() => {
+    if (!checkEmail || !emailRef.current) return;
+    emailRef.current.focus();
+    emailRef.current.select();
+    setCheckEmail(false);
+  }, [checkEmail, mode]);
   const go = m => {
     setMode(m);
     setErr('');
     setInfo('');
     setUnconfirmed(false);
+    if (email.trim() && (m === 'signup' || m === 'forgot')) setCheckEmail(true);
     if (notice) setGame({ authNotice: null });
   };
   const run = async fn => {
@@ -149,6 +163,12 @@ function AuthCard() {
             Back to sign in
           </button>
         </div>
+        <p className="cm-fine">
+          Wrong email?{' '}
+          <button type="button" className="cm-link" onClick={() => go(signup ? 'signup' : 'forgot')}>
+            Fix it
+          </button>
+        </p>
       </motion.div>
     );
   }
@@ -164,8 +184,17 @@ function AuthCard() {
       {notice && !signup && !forgot && <p className={notice.kind === 'bad' ? 'cm-error' : 'cm-notice'}>{notice.text}</p>}
       <label className="cm-field">
         <span>Email</span>
-        <input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+        <input ref={emailRef} type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
       </label>
+      {suggestion && (
+        <p className="cm-hint is-bad">
+          Did you mean{' '}
+          <button type="button" className="cm-link" onClick={() => setEmail(suggestion)}>
+            {suggestion}
+          </button>
+          ?
+        </p>
+      )}
       {signup && (
         <>
           <label className="cm-field">
