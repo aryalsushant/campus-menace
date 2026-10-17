@@ -52,7 +52,7 @@ async function loadProfile() {
   if (!u.user) return null;
   const rows = unwrap(await supabase.from('profiles').select(PROFILE).eq('id', u.user.id).limit(1));
   if (rows[0]) return rows[0];
-  // first sign-in after confirming: claim the username picked at sign-up
+  // accounts made when sign-up still asked for a username claim it now
   const wanted = u.user.user_metadata && u.user.user_metadata.username;
   if (!wanted) return null;
   try {
@@ -80,12 +80,15 @@ export const api = {
     return unwrap(await supabase.auth.signInWithPassword({ email: email.trim(), password }));
   },
   // Creates an unconfirmed account; Supabase emails a link back to this site.
-  // The username rides along in user metadata and is claimed on first sign-in.
-  async signUp(email, password, username) {
-    const data = unwrap(await supabase.auth.signUp({ email: email.trim(), password, options: { data: { username }, emailRedirectTo: home() } }));
+  // Players pick their username after the tutorial.
+  async signUp(email, password) {
+    const data = unwrap(await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: home() } }));
     // an already-confirmed email comes back with no identities instead of an error
     if (data.user && data.user.identities && data.user.identities.length === 0) throw new Error('There’s already an account with that email. Sign in instead.');
     return data;
+  },
+  async emailRegistered(email) {
+    return unwrap(await supabase.rpc('email_registered', { p_email: email.trim() }));
   },
   async resendConfirmation(email) {
     unwrap(await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: home() } }));
