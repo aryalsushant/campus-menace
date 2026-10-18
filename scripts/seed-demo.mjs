@@ -13,6 +13,9 @@ if (!url || !secret) {
 }
 const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
 
+// Demo accounts with a username rank with scores capped below 150, so
+// they never outrank real players.
+const DEMO_CAP = 149;
 const DEMOS = [
   { key: 'DEMO1', email: 'demo1@campusmenace.test', username: 'pizza_goblin', runs: 14, skill: 1.0 },
   { key: 'DEMO2', email: 'demo2@campusmenace.test', username: 'scooter_slayer', runs: 9, skill: 0.8 },
@@ -47,6 +50,8 @@ for (const d of DEMOS) {
   if (d.username) {
     const { error } = await admin.from('profiles').insert({ id: user.id, username: d.username });
     if (error) throw error;
+    const { error: capErr } = await admin.from('score_caps').upsert({ user_id: user.id, cap: DEMO_CAP });
+    if (capErr) throw capErr;
     const runs = [];
     for (let i = 0; i < d.runs; i++) {
       const distance = Math.round(300 + Math.random() * 2600 * d.skill);
