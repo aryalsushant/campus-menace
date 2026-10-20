@@ -8,7 +8,7 @@ import { wireAudio } from './game/audio/wire';
 import { setMuted } from './game/audio/sound';
 import { api, authLink, clearAuthLink } from './lib/api';
 import { startRun, togglePause, wireFlow, prepareNextRun } from './ui/flow';
-import Landing from './ui/Landing.jsx';
+import Landing, { PlayerNotice } from './ui/Landing.jsx';
 import Hud from './ui/Hud.jsx';
 import Tutorial from './ui/Tutorial.jsx';
 import { PauseMenu, GameOver } from './ui/Menus.jsx';
@@ -29,15 +29,16 @@ export default function App() {
     const load = async session => {
       if (!live) return;
       if (!session) {
-        setGame({ session: null, profile: null, authReady: true, tutorialDone: false, universityAsked: false });
+        setGame({ session: null, profile: null, playerNotice: null, authReady: true, tutorialDone: false, universityAsked: false });
         return;
       }
       setGame({ session });
       try {
         const profile = await api.profile();
-        if (live) setGame({ profile, authReady: true });
+        const notice = await api.playerNotice();
+        if (live) setGame({ profile, playerNotice: notice, authReady: true });
       } catch {
-        if (live) setGame({ profile: null, authReady: true });
+        if (live) setGame({ profile: null, playerNotice: null, authReady: true });
       }
     };
     api.session().then(s => {
@@ -95,6 +96,7 @@ export default function App() {
       <Game />
       {phase === 'landing' && <div className="cm-scrim" />}
       {phase === 'landing' && <Landing />}
+      {phase === 'landing' && <PlayerNotice />}
       {(phase === 'playing' || phase === 'over') && <Hud />}
       {phase === 'playing' && <Tutorial />}
       <AnimatePresence>{phase === 'playing' && paused && <PauseMenu key="pause" />}</AnimatePresence>

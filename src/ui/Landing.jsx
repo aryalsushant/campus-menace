@@ -58,6 +58,22 @@ export default function Landing() {
   );
 }
 
+export function PlayerNotice() {
+  const notice = useGame(s => s.playerNotice);
+  if (!notice) return null;
+  return (
+    <motion.div className="cm-overlay cm-overlay--top" {...card}>
+      <motion.div className="cm-card" {...card}>
+        <p className="cm-eyebrow">NOTICE</p>
+        <p className="cm-muted">{notice.message}</p>
+        <button className="cm-btn cm-btn--primary" autoFocus onClick={() => setGame({ playerNotice: null })}>
+          I understand
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function AuthCard() {
   const notice = useGame(s => s.authNotice);
   // signin | signup | sent (check your inbox) | forgot | reset-sent

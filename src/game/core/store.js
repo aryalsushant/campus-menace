@@ -47,6 +47,7 @@ export const useGame = create(set => ({
   universityAsked: false, // the first-sign-in university picker was shown
   recovering: false, // arrived from a password-reset link
   authNotice: null, // { kind: 'good' | 'bad', text } shown on the sign-in screens
+  playerNotice: null,
   stats: null,
   runCount: 0,
   objVersion: 0,

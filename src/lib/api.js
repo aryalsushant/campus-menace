@@ -116,6 +116,10 @@ export const api = {
     if (!profileReq) profileReq = loadProfile().finally(() => (profileReq = null));
     return profileReq;
   },
+  async playerNotice() {
+    const rows = unwrap(await supabase.rpc('claim_player_notice'));
+    return rows[0] || null;
+  },
   async account() {
     const { data } = await supabase.auth.getUser();
     return data.user ? { email: data.user.email, createdAt: data.user.created_at } : null;
